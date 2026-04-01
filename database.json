@@ -1,0 +1,59 @@
+{
+  "users": {
+    "digitalexcellence.in@gmail.com": {
+      "id": "digitalexcellence.in@gmail.com",
+      "email": "digitalexcellence.in@gmail.com",
+      "name": "Kartavya Agarwal",
+      "phone": "7300628199",
+      "passwordHash": "$2b$10$w0xs.2uWNKxX3exmuodBxu/okAn7uxTc/bQ79hFbi8ZrArQaQrC0W",
+      "storeSlug": "gadget-city",
+      "createdAt": "2026-03-31T14:38:13.643Z"
+    }
+  },
+  "stores": {
+    "gadget-city": {
+      "slug": "gadget-city",
+      "ownerId": "digitalexcellence.in@gmail.com",
+      "name": "Gadget city",
+      "description": "test",
+      "whatsapp": "7300628199",
+      "logo": "/logos/logo_mneq200bwrv448.jpg",
+      "template": "vibrant",
+      "theme": "default",
+      "products": [],
+      "orders": [],
+      "visits": 5,
+      "createdAt": "2026-03-31T14:38:13.643Z"
+    }
+  },
+  "templates": [
+    {
+      "id": "modern",
+      "name": "Modern Purple",
+      "colors": {
+        "primary": "#7c3aed",
+        "secondary": "#2563eb"
+      }
+    },
+    {
+      "id": "minimal",
+      "name": "Minimal Black",
+      "colors": {
+        "primary": "#111827",
+        "secondary": "#64748b"
+      }
+    },
+    {
+      "id": "vibrant",
+      "name": "Bold Colorful",
+      "colors": {
+        "primary": "#ff6b6b",
+        "secondary": "#ffd93d"
+      }
+    }
+  ],
+  "superAdmin": {
+    "email": "admin@myshopbuilder.com",
+    "passwordHash": "$2b$10$KtL4Q9N6ySaUPym/U267D.0cSdKxFAAZdhhyknBDrQcPjsQc.hANW"
+  }
+}
