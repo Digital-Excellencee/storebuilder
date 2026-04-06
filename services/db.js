@@ -767,8 +767,8 @@ function normalizeDB(db) {
 let _dbCache = null;
 let _dbCacheTime = 0;
 let _dbRefreshPromise = null;
-const DB_CACHE_TTL = 30000;
-const DB_CACHE_MAX_STALE = 5 * 60 * 1000;
+const DB_CACHE_TTL = Math.max(5000, Number(process.env.DB_CACHE_TTL_MS || 5 * 60 * 1000));
+const DB_CACHE_MAX_STALE = Math.max(DB_CACHE_TTL, Number(process.env.DB_CACHE_MAX_STALE_MS || 30 * 60 * 1000));
 const APP_DATA_MIRROR_DELAY = 2000;
 const VISIT_FLUSH_DELAY = 5000;
 const _pendingVisitCounts = new Map();
