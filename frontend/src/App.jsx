@@ -280,10 +280,11 @@ function useStoreWishlist(slug) {
 }
 
 function useApiData(load, deps, initialValue) {
-  const [state, setState] = useState({ loading: true, error: '', data: initialValue });
+  const hasInitialData = initialValue && typeof initialValue === 'object' && Object.values(initialValue).some((value) => Array.isArray(value) ? value.length > 0 : !!value);
+  const [state, setState] = useState({ loading: !hasInitialData, error: '', data: initialValue });
   useEffect(() => {
     let active = true;
-    setState((prev) => ({ ...prev, loading: true, error: '' }));
+    setState((prev) => ({ ...prev, loading: !hasInitialData, error: '' }));
     Promise.resolve()
       .then(load)
       .then((data) => {
@@ -296,6 +297,17 @@ function useApiData(load, deps, initialValue) {
       active = false;
     };
   }, deps);
+  return state;
+}
+
+function useCachedApiData(cacheKey, load, deps, initialValue) {
+  const initial = readSessionJson(cacheKey, initialValue);
+  const state = useApiData(load, deps, initial);
+  useEffect(() => {
+    if (!state.loading && !state.error) {
+      sessionStorage.setItem(cacheKey, JSON.stringify(state.data));
+    }
+  }, [cacheKey, state.loading, state.error, state.data]);
   return state;
 }
 
@@ -538,12 +550,31 @@ function AuthShell({ title, subtitle, children, footer }) {
   );
 }
 
+function GoogleAuthButton({ href }) {
+  return <a className="google-auth-btn" href={href}><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>Continue with Google</a>;
+}
+
 function VendorLoginPage() {
   usePageTitle('Vendor Login - StoreBanao');
   const navigate = useNavigate();
-  const { loginVendor } = useAuth();
+  const [searchParams] = useSearchParams();
+  const { loginVendor, loginVendorWithGoogle } = useAuth();
   const [form, setForm] = useState({ email: '', password: '' });
   const [state, setState] = useState({ loading: false, error: '' });
+
+  useEffect(() => {
+    if (searchParams.get('google') !== '1') return;
+    let active = true;
+    setState({ loading: true, error: '' });
+    loginVendorWithGoogle().then(() => {
+      if (active) navigate('/dashboard', { replace: true });
+    }).catch((error) => {
+      if (active) setState({ loading: false, error: error.message || 'Google sign-in failed' });
+    });
+    return () => {
+      active = false;
+    };
+  }, [searchParams, loginVendorWithGoogle, navigate]);
 
   async function submit(event) {
     event.preventDefault();
@@ -562,6 +593,7 @@ function VendorLoginPage() {
     <AuthShell title="Welcome back" subtitle="Log in to manage your store, orders, and customers.">
       {state.error ? <Alert type="error">{state.error}</Alert> : null}
       <form onSubmit={submit} className="form-grid">
+        <GoogleAuthButton href={`${API_URL}/auth/google?flow=vendor&redirect=%2Fdashboard`} />
         <div className="field"><label htmlFor="vendor-email">Email</label><input id="vendor-email" type="email" value={form.email} onChange={(event) => setForm((prev) => ({ ...prev, email: event.target.value }))} placeholder="you@email.com" required /></div>
         <div className="field"><label htmlFor="vendor-password">Password</label><input id="vendor-password" type="password" value={form.password} onChange={(event) => setForm((prev) => ({ ...prev, password: event.target.value }))} placeholder="Your password" required /></div>
         <div className="actions"><button className="btn" type="submit" disabled={state.loading}>{state.loading ? 'Logging in...' : 'Login'}</button><Link className="btn btn-secondary" to="/register">Create store</Link></div>
@@ -573,17 +605,34 @@ function VendorLoginPage() {
 function VendorRegisterPage() {
   usePageTitle('Create Your Store - StoreBanao');
   const navigate = useNavigate();
-  const { registerVendor } = useAuth();
+  const [searchParams] = useSearchParams();
+  const googleMode = searchParams.get('google') === '1';
+  const { registerVendor, completeVendorGoogleSignup } = useAuth();
   const [form, setForm] = useState({ name: '', email: '', phone: '', password: '', storeName: '', description: '', templateId: 'app-style' });
   const [state, setState] = useState({ loading: false, error: '' });
   const { data, loading } = useApiData(() => api.get('/api/templates'), [], { templates: [] });
   const templates = data.templates || [];
 
+  useEffect(() => {
+    if (!googleMode) return;
+    let active = true;
+    api.get('/api/auth/google/profile').then((data) => {
+      if (!active) return;
+      setForm((prev) => ({ ...prev, name: data.profile.name || '', email: data.profile.email || '', phone: '', password: '' }));
+    }).catch((error) => {
+      if (active) setState({ loading: false, error: error.message || 'Google sign-in session expired' });
+    });
+    return () => {
+      active = false;
+    };
+  }, [googleMode]);
+
   async function submit(event) {
     event.preventDefault();
     setState({ loading: true, error: '' });
     try {
-      await registerVendor(form);
+      if (googleMode) await completeVendorGoogleSignup({ storeName: form.storeName, description: form.description, templateId: form.templateId });
+      else await registerVendor(form);
       navigate('/dashboard');
     } catch (error) {
       setState({ loading: false, error: error.message || 'Registration failed' });
@@ -596,10 +645,11 @@ function VendorRegisterPage() {
     <AuthShell title="Create your store" subtitle="Quick setup. Fill the basics and go live.">
       {state.error ? <Alert type="error">{state.error}</Alert> : null}
       <form onSubmit={submit} className="form-grid">
-        <div className="field"><label htmlFor="name">Full Name</label><input id="name" value={form.name} onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))} placeholder="Rahul Sharma" required /></div>
-        <div className="field"><label htmlFor="email">Email</label><input id="email" type="email" value={form.email} onChange={(event) => setForm((prev) => ({ ...prev, email: event.target.value }))} placeholder="you@email.com" required /></div>
-        <div className="field"><label htmlFor="phone">Phone / WhatsApp</label><input id="phone" value={form.phone} onChange={(event) => setForm((prev) => ({ ...prev, phone: event.target.value }))} placeholder="9876543210" required /></div>
-        <div className="field"><label htmlFor="password">Password</label><input id="password" type="password" value={form.password} onChange={(event) => setForm((prev) => ({ ...prev, password: event.target.value }))} placeholder="Minimum 8 characters" required /></div>
+        {!googleMode ? <GoogleAuthButton href={`${API_URL}/auth/google?flow=vendor&redirect=%2Fdashboard`} /> : null}
+        <div className="field"><label htmlFor="name">Full Name</label><input id="name" value={form.name} onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))} placeholder="Rahul Sharma" required readOnly={googleMode} /></div>
+        <div className="field"><label htmlFor="email">Email</label><input id="email" type="email" value={form.email} onChange={(event) => setForm((prev) => ({ ...prev, email: event.target.value }))} placeholder="you@email.com" required readOnly={googleMode} /></div>
+        {!googleMode ? <div className="field"><label htmlFor="phone">Phone / WhatsApp</label><input id="phone" value={form.phone} onChange={(event) => setForm((prev) => ({ ...prev, phone: event.target.value }))} placeholder="9876543210" required /></div> : null}
+        {!googleMode ? <div className="field"><label htmlFor="password">Password</label><input id="password" type="password" value={form.password} onChange={(event) => setForm((prev) => ({ ...prev, password: event.target.value }))} placeholder="Minimum 8 characters" required /></div> : null}
         <div className="field"><label htmlFor="storeName">Store Name</label><input id="storeName" value={form.storeName} onChange={(event) => setForm((prev) => ({ ...prev, storeName: event.target.value }))} placeholder="My Store" required /></div>
         <div className="slug-preview">Your store URL: <strong>/store/{slugify(form.storeName) || 'your-store'}</strong></div>
         <div className="field"><label htmlFor="templateId">Template</label><select id="templateId" value={form.templateId} onChange={(event) => setForm((prev) => ({ ...prev, templateId: event.target.value }))}>{loading ? <option>Loading...</option> : templates.map((template) => <option key={template.id} value={template.id}>{template.name}</option>)}</select></div>
@@ -639,7 +689,8 @@ function DashboardOverviewPage() {
   usePageTitle('Dashboard - StoreBanao');
   const { vendor } = useAuth();
   const token = vendor && vendor.token;
-  const { data, loading, error } = useApiData(() => api.get('/api/dashboard', token), [token], { stats: {}, store: {} });
+  const userSlug = vendor && vendor.user && vendor.user.storeSlug ? vendor.user.storeSlug : 'dashboard';
+  const { data, loading, error } = useCachedApiData(`vendor_dashboard_${userSlug}`, () => api.get('/api/dashboard', token), [token], { stats: {}, store: {} });
   const stats = data.stats || {};
   const store = data.store || {};
   const setupItems = [
@@ -666,7 +717,7 @@ function DashboardProductsPage() {
   const [form, setForm] = useState({ name: '', description: '', price: '', comparePrice: '', stock: '', sku: '', image: '', category: '' });
   const [actionState, setActionState] = useState({ loading: false, error: '', success: '' });
   const [uploadingImage, setUploadingImage] = useState(false);
-  const { data, loading, error } = useApiData(() => api.get('/api/dashboard/products', token), [token], { products: [] });
+  const { data, loading, error } = useCachedApiData(`vendor_products_${vendor && vendor.user ? vendor.user.storeSlug : 'store'}`, () => api.get('/api/dashboard/products', token), [token], { products: [] });
   const products = data.products || [];
 
   function startEdit(product) {
@@ -730,7 +781,7 @@ function DashboardOrdersPage() {
   usePageTitle('Orders - StoreBanao');
   const { vendor } = useAuth();
   const token = vendor && vendor.token;
-  const { data, loading, error } = useApiData(() => api.get('/api/dashboard/orders', token), [token], { orders: [] });
+  const { data, loading, error } = useCachedApiData(`vendor_orders_${vendor && vendor.user ? vendor.user.storeSlug : 'store'}`, () => api.get('/api/dashboard/orders', token), [token], { orders: [] });
   const orders = data.orders || [];
 
   async function updateStatus(orderId, status) {
@@ -752,7 +803,7 @@ function DashboardCustomersPage() {
   usePageTitle('Customers - StoreBanao');
   const { vendor } = useAuth();
   const token = vendor && vendor.token;
-  const { data, loading, error } = useApiData(() => api.get('/api/dashboard/customers', token), [token], { customers: [] });
+  const { data, loading, error } = useCachedApiData(`vendor_customers_${vendor && vendor.user ? vendor.user.storeSlug : 'store'}`, () => api.get('/api/dashboard/customers', token), [token], { customers: [] });
   const customers = data.customers || [];
   return (
     <VendorOnly>
@@ -1190,7 +1241,7 @@ function ProductPage() {
   const [wishlist, setWishlist] = useStoreWishlist(slug);
   const [reviewForm, setReviewForm] = useState({ reviewName: '', rating: '5', comment: '' });
   const [reviewState, setReviewState] = useState({ loading: false, error: '' });
-  const { data, loading, error } = useApiData(() => api.get(`/api/store/${slug}/product/${id}`), [slug, id], { product: null, related: [] });
+  const { data, loading, error } = useCachedApiData(`store_product_${slug}_${id}`, () => api.get(`/api/store/${slug}/product/${id}`), [slug, id], { product: null, related: [] });
   const product = data.product;
   const related = data.related || [];
   usePageTitle(product ? `${product.name} - StoreBanao` : 'Product - StoreBanao');
@@ -1288,7 +1339,7 @@ function TrackOrderPage() {
   const { slug, code } = useParams();
   const [input, setInput] = useState(code || '');
   const [queryCode, setQueryCode] = useState(code || '');
-  const { data, loading, error } = useApiData(() => queryCode ? api.get(`/api/store/${slug}/order/${queryCode}`) : Promise.resolve({ order: null }), [slug, queryCode], { order: null });
+  const { data, loading, error } = useCachedApiData(`store_order_${slug}_${queryCode || 'empty'}`, () => queryCode ? api.get(`/api/store/${slug}/order/${queryCode}`) : Promise.resolve({ order: null }), [slug, queryCode], { order: null });
   const order = data.order;
   usePageTitle('Track Order - StoreBanao');
   return (
@@ -1299,10 +1350,24 @@ function TrackOrderPage() {
 function CustomerLoginPage() {
   const { slug } = useParams();
   const navigate = useNavigate();
-  const { loginCustomer } = useAuth();
+  const [searchParams] = useSearchParams();
+  const { loginCustomer, loginCustomerWithGoogle } = useAuth();
   const [form, setForm] = useState({ email: '', password: '' });
   const [state, setState] = useState({ loading: false, error: '' });
   usePageTitle('Customer Login - StoreBanao');
+  useEffect(() => {
+    if (searchParams.get('google') !== '1') return;
+    let active = true;
+    setState({ loading: true, error: '' });
+    loginCustomerWithGoogle(slug).then(() => {
+      if (active) navigate(`/store/${slug}/account`, { replace: true });
+    }).catch((error) => {
+      if (active) setState({ loading: false, error: error.message || 'Google login failed' });
+    });
+    return () => {
+      active = false;
+    };
+  }, [searchParams, loginCustomerWithGoogle, slug, navigate]);
   async function submit(event) {
     event.preventDefault();
     setState({ loading: true, error: '' });
@@ -1315,7 +1380,7 @@ function CustomerLoginPage() {
     }
     setState({ loading: false, error: '' });
   }
-  return <AuthShell title="Customer login" subtitle="Log in to view orders, wishlist, and saved details.">{state.error ? <Alert type="error">{state.error}</Alert> : null}<form className="form-grid" onSubmit={submit}><div className="field"><label>Email</label><input type="email" value={form.email} onChange={(event) => setForm((prev) => ({ ...prev, email: event.target.value }))} required /></div><div className="field"><label>Password</label><input type="password" value={form.password} onChange={(event) => setForm((prev) => ({ ...prev, password: event.target.value }))} required /></div><div className="actions"><button className="btn" type="submit" disabled={state.loading}>{state.loading ? 'Logging in...' : 'Login'}</button><Link className="btn btn-secondary" to={`/store/${slug}/account/register`}>Create account</Link></div></form></AuthShell>;
+  return <AuthShell title="Customer login" subtitle="Log in to view orders, wishlist, and saved details.">{state.error ? <Alert type="error">{state.error}</Alert> : null}<form className="form-grid" onSubmit={submit}><GoogleAuthButton href={`${API_URL}/auth/google?flow=customer&store=${encodeURIComponent(slug)}&redirect=${encodeURIComponent(`/store/${slug}/account`)}`} /><div className="field"><label>Email</label><input type="email" value={form.email} onChange={(event) => setForm((prev) => ({ ...prev, email: event.target.value }))} required /></div><div className="field"><label>Password</label><input type="password" value={form.password} onChange={(event) => setForm((prev) => ({ ...prev, password: event.target.value }))} required /></div><div className="actions"><button className="btn" type="submit" disabled={state.loading}>{state.loading ? 'Logging in...' : 'Login'}</button><Link className="btn btn-secondary" to={`/store/${slug}/account/register`}>Create account</Link></div></form></AuthShell>;
 }
 
 function CustomerRegisterPage() {
@@ -1337,15 +1402,15 @@ function CustomerRegisterPage() {
     }
     setState({ loading: false, error: '' });
   }
-  return <AuthShell title="Create customer account" subtitle="Save your details, wishlist, and order history.">{state.error ? <Alert type="error">{state.error}</Alert> : null}<form className="form-grid" onSubmit={submit}><div className="field"><label>Name</label><input value={form.name} onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))} required /></div><div className="field"><label>Email</label><input type="email" value={form.email} onChange={(event) => setForm((prev) => ({ ...prev, email: event.target.value }))} required /></div><div className="field"><label>Phone</label><input value={form.phone} onChange={(event) => setForm((prev) => ({ ...prev, phone: event.target.value }))} required /></div><div className="field"><label>Password</label><input type="password" value={form.password} onChange={(event) => setForm((prev) => ({ ...prev, password: event.target.value }))} required /></div><div className="actions"><button className="btn" type="submit" disabled={state.loading}>{state.loading ? 'Creating...' : 'Create account'}</button><Link className="btn btn-secondary" to={`/store/${slug}/account/login`}>Already have an account?</Link></div></form></AuthShell>;
+  return <AuthShell title="Create customer account" subtitle="Save your details, wishlist, and order history.">{state.error ? <Alert type="error">{state.error}</Alert> : null}<form className="form-grid" onSubmit={submit}><GoogleAuthButton href={`${API_URL}/auth/google?flow=customer&store=${encodeURIComponent(slug)}&redirect=${encodeURIComponent(`/store/${slug}/account`)}`} /><div className="field"><label>Name</label><input value={form.name} onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))} required /></div><div className="field"><label>Email</label><input type="email" value={form.email} onChange={(event) => setForm((prev) => ({ ...prev, email: event.target.value }))} required /></div><div className="field"><label>Phone</label><input value={form.phone} onChange={(event) => setForm((prev) => ({ ...prev, phone: event.target.value }))} required /></div><div className="field"><label>Password</label><input type="password" value={form.password} onChange={(event) => setForm((prev) => ({ ...prev, password: event.target.value }))} required /></div><div className="actions"><button className="btn" type="submit" disabled={state.loading}>{state.loading ? 'Creating...' : 'Create account'}</button><Link className="btn btn-secondary" to={`/store/${slug}/account/login`}>Already have an account?</Link></div></form></AuthShell>;
 }
 
 function CustomerAccountPage() {
   const { slug } = useParams();
   const { customer, logoutCustomer } = useAuth();
   const auth = customer && customer.slug === slug ? customer : null;
-  const ordersState = useApiData(() => auth ? api.get(`/api/store/${slug}/account/orders`, auth.token) : Promise.resolve({ orders: [] }), [auth && auth.token, slug], { orders: [] });
-  const wishlistState = useApiData(() => auth ? api.get(`/api/store/${slug}/account/wishlist`, auth.token) : Promise.resolve({ products: [] }), [auth && auth.token, slug], { products: [] });
+  const ordersState = useCachedApiData(`customer_orders_${slug}_${auth && auth.customer ? auth.customer.email : 'anon'}`, () => auth ? api.get(`/api/store/${slug}/account/orders`, auth.token) : Promise.resolve({ orders: [] }), [auth && auth.token, slug], { orders: [] });
+  const wishlistState = useCachedApiData(`customer_wishlist_${slug}_${auth && auth.customer ? auth.customer.email : 'anon'}`, () => auth ? api.get(`/api/store/${slug}/account/wishlist`, auth.token) : Promise.resolve({ products: [] }), [auth && auth.token, slug], { products: [] });
   usePageTitle('My Account - StoreBanao');
   return <CustomerOnly slug={slug}><div className="store-page"><div className="store-wrap"><section className="card panel account-page"><div className="section-head"><div><h1 className="section-title">My account</h1><p className="section-subtitle">Manage orders, saved products, and profile details.</p></div><button className="btn btn-secondary" type="button" onClick={() => logoutCustomer()}>Logout</button></div><div className="app-account-card"><strong>{auth.customer.name}</strong><span>{auth.customer.email}</span><span>{auth.customer.phone}</span></div><section className="card panel"><h2 className="section-title" style={{ fontSize: 22 }}>My Orders</h2>{ordersState.loading ? <LoadingBlock label="Loading orders..." /> : ordersState.data.orders.length ? <div className="table-wrap"><table><thead><tr><th>Order</th><th>Status</th><th>Amount</th><th>Date</th></tr></thead><tbody>{ordersState.data.orders.map((order) => <tr key={order.id}><td><Link to={`/store/${slug}/order/${order.trackingCode}`}>{order.orderNumber}</Link></td><td>{order.status}</td><td>{formatMoney(order.amount)}</td><td>{formatDate(order.createdAt)}</td></tr>)}</tbody></table></div> : <EmptyState title="No orders yet" body="Your future orders will appear here." />}</section><section className="card panel"><h2 className="section-title" style={{ fontSize: 22 }}>Wishlist</h2>{wishlistState.loading ? <LoadingBlock label="Loading wishlist..." /> : wishlistState.data.products.length ? <div className="app-grid">{wishlistState.data.products.map((product) => <ProductCard key={product.id} slug={slug} product={product} wished onAddToCart={() => {}} onToggleWishlist={() => {}} />)}</div> : <EmptyState title="Wishlist is empty" body="Save products you want to come back to." />}</section></section></div></div></CustomerOnly>;
 }

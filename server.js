@@ -105,6 +105,14 @@ function getApiUser(db, email) {
   return db && db.users ? db.users[String(email || '').trim().toLowerCase()] || null : null;
 }
 
+function getPendingGoogleProfile(req) {
+  const profile = req.session && req.session.googleAuth && typeof req.session.googleAuth === 'object' ? req.session.googleAuth : null;
+  const email = String(profile && profile.email || '').trim().toLowerCase();
+  const name = String(profile && profile.name || '').trim();
+  if (!email || !validateEmail(email)) return null;
+  return { email, name: name || email };
+}
+
 function sanitizeApiProduct(body) {
   return {
     name: String(body && body.name || '').trim(),
@@ -469,6 +477,74 @@ app.post('/api/auth/login', async (req, res) => {
         theme: store.theme
       } : null
     });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.get('/api/auth/google/profile', async (req, res) => {
+  const profile = getPendingGoogleProfile(req);
+  if (!profile) return res.status(404).json({ success: false, error: 'No pending Google profile' });
+  res.json({ success: true, profile });
+});
+
+app.get('/api/store/:slug/auth/google/profile', async (req, res) => {
+  const pending = req.session && req.session.googleCustomerAuth && typeof req.session.googleCustomerAuth === 'object' ? req.session.googleCustomerAuth : null;
+  const slug = String(req.params.slug || '').trim();
+  if (!pending || pending.storeSlug !== slug) return res.status(404).json({ success: false, error: 'No pending Google customer profile' });
+  res.json({ success: true, profile: { email: pending.email, name: pending.name || pending.email, slug } });
+});
+
+app.post('/api/auth/google/login', async (req, res) => {
+  try {
+    const profile = getPendingGoogleProfile(req);
+    if (!profile) return res.status(404).json({ success: false, error: 'No pending Google profile' });
+    const db = await loadDB();
+    const user = db.users[profile.email];
+    if (!user || !user.storeSlug || !db.stores[user.storeSlug]) return res.status(404).json({ success: false, error: 'Google account is not linked to a store yet' });
+    const store = db.stores[user.storeSlug];
+    delete req.session.googleAuth;
+    res.json({ success: true, token: generateToken(user), user: { id: user.id, email: user.email, name: user.name, phone: user.phone, storeSlug: user.storeSlug, createdAt: user.createdAt }, store: { slug: store.slug, name: store.name, logo: store.logo, template: store.template, theme: store.theme } });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.post('/api/store/:slug/auth/google/login', async (req, res) => {
+  try {
+    const pending = req.session && req.session.googleCustomerAuth && typeof req.session.googleCustomerAuth === 'object' ? req.session.googleCustomerAuth : null;
+    const slug = String(req.params.slug || '').trim();
+    if (!pending || pending.storeSlug !== slug) return res.status(404).json({ success: false, error: 'No pending Google customer login' });
+    const db = await loadDB();
+    const store = getApiStore(db, slug);
+    if (!store) return res.status(404).json({ success: false, error: 'Store not found' });
+    const customer = store.customers && store.customers[pending.email] ? store.customers[pending.email] : null;
+    if (!customer) return res.status(404).json({ success: false, error: 'Customer not found' });
+    delete req.session.googleCustomerAuth;
+    res.json({ success: true, token: generateCustomerToken(customer, slug), customer });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.post('/api/auth/google/complete', async (req, res) => {
+  try {
+    const profile = getPendingGoogleProfile(req);
+    if (!profile) return res.status(404).json({ success: false, error: 'No pending Google profile' });
+    const storeName = String(req.body.storeName || '').trim();
+    const description = String(req.body.description || '').trim();
+    const templateId = String(req.body.templateId || '').trim() || 'app-style';
+    if (!storeName || !description) return res.status(400).json({ success: false, error: 'Store name and description required' });
+    const db = await loadDB();
+    if (db.users[profile.email]) return res.status(400).json({ success: false, error: 'Email already registered' });
+    let slug = slugify(storeName);
+    while (db.stores[slug]) slug = `${slugify(storeName)}-${Math.floor(Math.random() * 9000 + 1000)}`;
+    const createdAt = new Date().toISOString();
+    db.users[profile.email] = { id: profile.email, email: profile.email, name: profile.name, phone: '', passwordHash: '', storeSlug: slug, createdAt, authProvider: 'google', emailVerified: true };
+    db.stores[slug] = { slug, ownerId: profile.email, name: storeName, description, whatsapp: '', logo: '', template: templateId, theme: 'default', themeConfig: {}, products: [], orders: [], customers: {}, visits: 0, createdAt };
+    await saveDB(db);
+    delete req.session.googleAuth;
+    res.json({ success: true, token: generateToken(db.users[profile.email]), user: { id: profile.email, email: profile.email, name: profile.name, storeSlug: slug }, store: { slug, name: storeName } });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
   }

@@ -64,6 +64,10 @@ function getSupabaseAuthClient(req) {
 }
 
 function getBaseUrl(req) {
+  return process.env.API_BASE_URL || `${req.protocol}://${req.get('host')}`;
+}
+
+function getFrontendBaseUrl(req) {
   return process.env.BASE_URL || `${req.protocol}://${req.get('host')}`;
 }
 
@@ -192,23 +196,21 @@ router.get('/auth/callback', route(async (req, res) => {
       sendCustomerWelcomeEmail(customer, store).catch(console.error);
       sendAdminNewUserAlert(customer, 'customer', store).catch(console.error);
     }
+    req.session.googleCustomerAuth = { storeSlug, email, name };
     setLoggedCustomer(req, storeSlug, email);
-    setFlash(req, 'success', 'Logged in with Google successfully.');
-    res.redirect(`/store/${encodeURIComponent(storeSlug)}/account`);
+    res.redirect(`${getFrontendBaseUrl(req)}/store/${encodeURIComponent(storeSlug)}/account/login?google=1`);
     return;
   }
 
   const db = await loadDB();
   const existingUser = db.users[email];
   if (existingUser && existingUser.storeSlug && db.stores[existingUser.storeSlug]) {
-    req.session.userId = existingUser.id;
-    delete req.session.googleAuth;
-    setFlash(req, 'success', 'Welcome back.');
-    res.redirect('/dashboard');
+    req.session.googleAuth = { email, name, provider: 'google' };
+    res.redirect(`${getFrontendBaseUrl(req)}/login?google=1`);
     return;
   }
   req.session.googleAuth = { email, name, provider: 'google' };
-  res.redirect(`/register?google=1&email=${encodeURIComponent(email)}&name=${encodeURIComponent(name)}`);
+  res.redirect(`${getFrontendBaseUrl(req)}/register?google=1`);
 }));
 
 router.get('/', route(async (req, res) => {

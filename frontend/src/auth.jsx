@@ -93,6 +93,18 @@ export function AuthProvider({ children }) {
       setVendor(next);
       return data;
     },
+    async loginVendorWithGoogle() {
+      const data = await api.post('/api/auth/google/login', {});
+      const next = { token: data.token, user: data.user, store: data.store };
+      setVendor(next);
+      return data;
+    },
+    async completeVendorGoogleSignup(payload) {
+      const data = await api.post('/api/auth/google/complete', payload);
+      const next = { token: data.token, user: data.user, store: data.store };
+      setVendor(next);
+      return data;
+    },
     logoutVendor() { setVendor(null); },
     async loginCustomer(slug, payload) {
       const data = await api.post(`/api/store/${slug}/auth/login`, payload);
@@ -101,6 +113,11 @@ export function AuthProvider({ children }) {
     },
     async registerCustomer(slug, payload) {
       const data = await api.post(`/api/store/${slug}/auth/register`, payload);
+      setCustomer({ token: data.token, slug, customer: data.customer });
+      return data;
+    },
+    async loginCustomerWithGoogle(slug) {
+      const data = await api.post(`/api/store/${slug}/auth/google/login`, {});
       setCustomer({ token: data.token, slug, customer: data.customer });
       return data;
     },

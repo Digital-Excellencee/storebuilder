@@ -88,6 +88,8 @@ th { font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: 
 .react-auth-page { min-height: 100vh; background: linear-gradient(180deg, #eef2ff, #f8fafc); }
 .auth-wrap { min-height: 100vh; display: grid; place-items: center; padding: 24px; }
 .auth-card { width: min(560px, 100%); padding: 28px; }
+.google-auth-btn { display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; min-height: 48px; padding: 12px 16px; border-radius: 14px; border: 1px solid var(--border); background: #fff; color: #111827; font-weight: 700; }
+.google-auth-btn svg { flex: 0 0 auto; }
 
 .dashboard-page { background: #f8fafc; min-height: 100vh; }
 .topbar { position: fixed; top: 0; left: 0; right: 0; height: 56px; padding: 0 18px; background: #fff; border-bottom: 1px solid #e2e8f0; display: flex; align-items: center; justify-content: space-between; z-index: 50; }

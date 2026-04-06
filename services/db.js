@@ -1535,12 +1535,29 @@ function queueDBRefresh() {
 async function loadDB() {
   const now = Date.now();
   if (_dbCache && (now - _dbCacheTime) < DB_CACHE_TTL) return _dbCache;
+  if (!_dbCache) {
+    _dbCache = readLocalDBSync();
+    _dbCacheTime = now;
+    queueDBRefresh().catch((error) => {
+      console.error('[DB] Background refresh failed.', error && error.message ? error.message : error);
+    });
+    return _dbCache;
+  }
   const stale = getStaleCache();
   if (stale) {
     queueDBRefresh().catch((error) => {
       console.error('[DB] Background refresh failed.', error && error.message ? error.message : error);
     });
     return stale;
+  }
+  const localBackup = readLocalDBSync();
+  if (hasMeaningfulData(localBackup)) {
+    _dbCache = localBackup;
+    _dbCacheTime = now;
+    queueDBRefresh().catch((error) => {
+      console.error('[DB] Background refresh failed.', error && error.message ? error.message : error);
+    });
+    return _dbCache;
   }
   return queueDBRefresh();
 }
