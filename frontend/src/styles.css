@@ -216,6 +216,27 @@ th { font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: 
 .osa-iframe { width: 100%; height: 720px; border: 0; display: block; }
 
 .store-page { min-height: 100vh; background: linear-gradient(180deg, #f8fafc, #f3f6fb); color: #111827; padding-bottom: 90px; }
+.store-page {
+  --store-primary: #6c47ff;
+  --store-secondary: #5535e0;
+  --store-button: #6c47ff;
+  --store-background: #f8fafc;
+  --store-heading-font: inherit;
+  --store-body-font: inherit;
+  background: var(--store-background, linear-gradient(180deg, #f8fafc, #f3f6fb));
+  font-family: var(--store-body-font, inherit);
+}
+.store-page h1, .store-page h2, .store-page h3, .store-page .app-section-title, .store-page .app-product-title { font-family: var(--store-heading-font, inherit); }
+.store-page .btn, .store-page .primary-btn { background: linear-gradient(135deg, var(--store-primary), var(--store-secondary)); }
+.store-page .app-eyebrow, .store-page .price, .store-page .app-product-price { color: var(--store-primary); }
+.store-page .app-search-form, .store-page .app-bottom-nav a.active { background: color-mix(in srgb, var(--store-primary) 10%, white); }
+.store-page.theme-minimal .app-feature-hero,
+.store-page.theme-zippy---quick-commerce .app-feature-hero { border-radius: 18px; box-shadow: 0 16px 30px rgba(15,23,42,.08); }
+.store-page.theme-bold-fashion .app-feature-hero { background: linear-gradient(135deg, rgba(220,38,38,.18), rgba(17,24,39,.28)); }
+.store-page.theme-bold-fashion .app-card { border-radius: 16px; }
+.store-page.theme-minto-fresh .app-feature-hero { background: linear-gradient(135deg, rgba(22,163,74,.18), rgba(132,204,22,.18)); }
+.store-page.theme-aerion-modern .app-card,
+.store-page.theme-nestly-home .app-card { border-radius: 30px; }
 .store-wrap { width: min(1180px, calc(100% - 24px)); margin: 0 auto; padding: 28px 0 40px; }
 .app-header { position: sticky; top: 0; z-index: 55; }
 .app-header-premium { display: grid; grid-template-columns: auto 1fr auto; gap: 14px; align-items: center; padding: 14px 16px; background: #fff; border-bottom: 1px solid var(--border); }

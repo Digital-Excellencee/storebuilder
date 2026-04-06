@@ -5,7 +5,7 @@ const fs = require('fs');
 const jwt = require('jsonwebtoken');
 const path = require('path');
 const config = require('./config');
-const { loadDB, saveDB, ensureDirectories, cloneDefaultDB, DEFAULT_TEMPLATES, FileSessionStore, getDBStatus, migrateFromBlobToTables, getSupabase } = require('./services/db');
+const { loadDB, saveDB, ensureDirectories, cloneDefaultDB, DEFAULT_TEMPLATES, FileSessionStore, getDBStatus, migrateFromBlobToTables, getSupabase, saveUploadedFile, removeStoredFile, runUploader } = require('./services/db');
 const { hashPassword, verifyPassword } = require('./services/password');
 const { syncLegacyUsersToSupabaseAuth } = require('./services/supabase-auth');
 const { escapeHtml, slugify, generateId, generateTrackingCode, generateOrderNumber, parsePrice, sanitizePhone } = require('./helpers/html');
@@ -14,6 +14,7 @@ const { getEffectiveShippingFee, applyRoundingMode } = require('./helpers/store'
 const { createRazorpayOrder, getRazorpayConfig } = require('./services/razorpay');
 const { sendEmail } = require('./services/email');
 const { getAppCatalog, getAppDefinition, normalizeStoreApps } = require('./services/apps');
+const { upload, csvUpload } = require('./middleware/upload');
 
 let helmet, rateLimit, MemoryStore;
 try { helmet = require('helmet'); } catch (e) { console.log('[WARN] Install helmet: npm install helmet'); }
@@ -123,6 +124,16 @@ function sanitizeApiProduct(body) {
 function getVendorStoreFromReq(db, req) {
   const user = getApiUser(db, req.apiUserEmail);
   return user ? getApiStore(db, user.storeSlug) : null;
+}
+
+async function getVendorStoreOr404(req, res) {
+  const db = await loadDB();
+  const store = getVendorStoreFromReq(db, req);
+  if (!store) {
+    res.status(404).json({ success: false, error: 'Store not found' });
+    return null;
+  }
+  return { db, store };
 }
 
 function appConfigured(appId, data) {
@@ -260,8 +271,8 @@ if (rateLimit) {
   app.use('/', apiLimiter);
 }
 
-app.use(express.urlencoded({ extended: true, limit: '1mb' }));
-app.use(express.json({ limit: '1mb' }));
+app.use(express.urlencoded({ extended: true, limit: '15mb' }));
+app.use(express.json({ limit: '15mb' }));
 const allowedOrigins = [
   'https://storebanao.com',
   'https://www.storebanao.com',
@@ -887,6 +898,105 @@ app.get('/api/dashboard/media', requireApiAuth, async (req, res) => {
   }
 });
 
+app.post('/api/dashboard/upload/logo', requireApiAuth, async (req, res) => {
+  try {
+    await runUploader(upload.single('file'), req, res);
+    if (!req.file) return res.status(400).json({ success: false, error: 'Please choose a logo file' });
+    const scope = await getVendorStoreOr404(req, res);
+    if (!scope) return;
+    const { db, store } = scope;
+    const nextLogo = await saveUploadedFile(req.file, 'logo');
+    await removeStoredFile(store.logo);
+    store.logo = nextLogo;
+    await saveDB(db);
+    res.json({ success: true, url: nextLogo });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.post('/api/dashboard/upload/favicon', requireApiAuth, async (req, res) => {
+  try {
+    await runUploader(upload.single('file'), req, res);
+    if (!req.file) return res.status(400).json({ success: false, error: 'Please choose a favicon file' });
+    const scope = await getVendorStoreOr404(req, res);
+    if (!scope) return;
+    const { db, store } = scope;
+    store.storeSettings = store.storeSettings && typeof store.storeSettings === 'object' ? store.storeSettings : {};
+    store.storeSettings.storeDetails = store.storeSettings.storeDetails && typeof store.storeSettings.storeDetails === 'object' ? store.storeSettings.storeDetails : {};
+    const nextFavicon = await saveUploadedFile(req.file, 'logo');
+    await removeStoredFile(store.storeSettings.storeDetails.favicon);
+    store.storeSettings.storeDetails.favicon = nextFavicon;
+    await saveDB(db);
+    res.json({ success: true, url: nextFavicon });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.post('/api/dashboard/upload/product-image', requireApiAuth, async (req, res) => {
+  try {
+    await runUploader(upload.single('file'), req, res);
+    if (!req.file) return res.status(400).json({ success: false, error: 'Please choose an image file' });
+    const imageUrl = await saveUploadedFile(req.file, 'product');
+    res.json({ success: true, url: imageUrl });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.post('/api/dashboard/upload/category-image', requireApiAuth, async (req, res) => {
+  try {
+    await runUploader(upload.single('file'), req, res);
+    if (!req.file) return res.status(400).json({ success: false, error: 'Please choose an image file' });
+    const imageUrl = await saveUploadedFile(req.file, 'category');
+    res.json({ success: true, url: imageUrl });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.post('/api/dashboard/upload/banner', requireApiAuth, async (req, res) => {
+  try {
+    await runUploader(upload.single('file'), req, res);
+    if (!req.file) return res.status(400).json({ success: false, error: 'Please choose a banner image' });
+    const mobile = String(req.query.mobile || '').trim() === 'true';
+    const scope = await getVendorStoreOr404(req, res);
+    if (!scope) return;
+    const { db, store } = scope;
+    store.themeConfig = store.themeConfig && typeof store.themeConfig === 'object' ? store.themeConfig : {};
+    const key = mobile ? 'bannerImagesMobile' : 'bannerImages';
+    store.themeConfig[key] = Array.isArray(store.themeConfig[key]) ? store.themeConfig[key] : [];
+    const imageUrl = await saveUploadedFile(req.file, 'banner');
+    store.themeConfig[key].push(imageUrl);
+    await saveDB(db);
+    res.json({ success: true, url: imageUrl, images: store.themeConfig[key] });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.delete('/api/dashboard/upload/banner/:index', requireApiAuth, async (req, res) => {
+  try {
+    const mobile = String(req.query.mobile || '').trim() === 'true';
+    const index = Number(req.params.index);
+    const scope = await getVendorStoreOr404(req, res);
+    if (!scope) return;
+    const { db, store } = scope;
+    store.themeConfig = store.themeConfig && typeof store.themeConfig === 'object' ? store.themeConfig : {};
+    const key = mobile ? 'bannerImagesMobile' : 'bannerImages';
+    store.themeConfig[key] = Array.isArray(store.themeConfig[key]) ? store.themeConfig[key] : [];
+    if (Number.isInteger(index) && index >= 0 && index < store.themeConfig[key].length) {
+      await removeStoredFile(store.themeConfig[key][index]);
+      store.themeConfig[key].splice(index, 1);
+      await saveDB(db);
+    }
+    res.json({ success: true, images: store.themeConfig[key] });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 app.get('/api/dashboard/leads', requireApiAuth, async (req, res) => {
   try {
     const db = await loadDB();
@@ -1282,6 +1392,53 @@ app.post('/api/dashboard/bulk-upload/import', requireApiAuth, async (req, res) =
     const store = getVendorStoreFromReq(db, req);
     if (!store) return res.status(404).json({ success: false, error: 'Store not found' });
     const lines = csvText.replace(/^\uFEFF/, '').split(/\r?\n/).filter((line) => line.trim());
+    if (lines.length < 2) return res.status(400).json({ success: false, error: 'CSV must include header and data rows' });
+    const headers = parseCsvLine(lines.shift()).map((cell) => cell.trim().toLowerCase());
+    let imported = 0;
+    store.products = Array.isArray(store.products) ? store.products : [];
+    lines.forEach((line) => {
+      const cells = parseCsvLine(line);
+      const row = {};
+      headers.forEach((header, index) => { row[header] = (cells[index] || '').trim(); });
+      if (String(row.name || '').trim()) {
+        const imageUrl = String(row.image || row.images || row.image_url || row.imageurl || '').trim();
+        store.products.push({
+          id: generateId('p'),
+          name: row.name.trim(),
+          price: parsePrice(row.price || '0'),
+          comparePrice: parsePrice(row.compareprice || row.compare_price || '0'),
+          mrp: parsePrice(row.compareprice || row.compare_price || row.price || '0'),
+          description: String(row.description || '').trim(),
+          image: imageUrl,
+          images: imageUrl ? [imageUrl] : [],
+          stock: Math.max(0, parseInt(String(row.stock || '0').replace(/[^0-9]/g, '').trim(), 10) || 0),
+          sku: String(row.sku || '').trim(),
+          category: String(row.category || '').trim(),
+          variants: [],
+          reviews: [],
+          active: String(row.active || 'true').trim().toLowerCase() !== 'false',
+          createdAt: new Date().toISOString(),
+          updatedAt: ''
+        });
+        imported += 1;
+      }
+    });
+    await saveDB(db);
+    res.json({ success: true, imported });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.post('/api/dashboard/bulk-upload/import-file', requireApiAuth, async (req, res) => {
+  try {
+    await runUploader(csvUpload.single('file'), req, res);
+    if (!req.file || !req.file.buffer) return res.status(400).json({ success: false, error: 'CSV file required' });
+    req.body.csvText = req.file.buffer.toString('utf8');
+    const db = await loadDB();
+    const store = getVendorStoreFromReq(db, req);
+    if (!store) return res.status(404).json({ success: false, error: 'Store not found' });
+    const lines = req.body.csvText.replace(/^\uFEFF/, '').split(/\r?\n/).filter((line) => line.trim());
     if (lines.length < 2) return res.status(400).json({ success: false, error: 'CSV must include header and data rows' });
     const headers = parseCsvLine(lines.shift()).map((cell) => cell.trim().toLowerCase());
     let imported = 0;
