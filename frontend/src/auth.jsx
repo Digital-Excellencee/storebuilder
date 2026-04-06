@@ -18,7 +18,12 @@ export function AuthProvider({ children }) {
   const [vendor, setVendor] = useState(() => readStorage(VENDOR_KEY));
   const [customer, setCustomer] = useState(() => readStorage(CUSTOMER_KEY));
   const [superAdmin, setSuperAdmin] = useState(() => readStorage(SUPERADMIN_KEY));
-  const [bootstrapping, setBootstrapping] = useState(true);
+  const [bootstrapping, setBootstrapping] = useState(() => {
+    const hasStoredVendor = !!readStorage(VENDOR_KEY);
+    const hasStoredCustomer = !!readStorage(CUSTOMER_KEY);
+    const hasStoredSuperAdmin = !!readStorage(SUPERADMIN_KEY);
+    return !(hasStoredVendor || hasStoredCustomer || hasStoredSuperAdmin);
+  });
 
   useEffect(() => {
     if (vendor) localStorage.setItem(VENDOR_KEY, JSON.stringify(vendor));
@@ -38,6 +43,7 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     let cancelled = false;
     async function bootstrap() {
+      if (!cancelled) setBootstrapping(false);
       try {
         const vendorAuth = readStorage(VENDOR_KEY);
         if (vendorAuth && vendorAuth.token) {
@@ -62,7 +68,6 @@ export function AuthProvider({ children }) {
           }
         }
       } finally {
-        if (!cancelled) setBootstrapping(false);
       }
     }
     bootstrap();

@@ -574,8 +574,7 @@ app.get('/api/store/:slug', async (req, res) => {
     if (!store) {
       return res.status(404).json({ success: false, error: 'Store not found' });
     }
-    store.visits += 1;
-    await saveDB(db);
+    store.visits = (parseInt(store.visits, 10) || 0) + 1;
     res.json({
       success: true,
       store: {
@@ -592,6 +591,9 @@ app.get('/api/store/:slug', async (req, res) => {
         visits: store.visits,
         createdAt: store.createdAt
       }
+    });
+    saveDB(db).catch((error) => {
+      console.error('[Store] Failed to persist visit count.', error && error.message ? error.message : error);
     });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });

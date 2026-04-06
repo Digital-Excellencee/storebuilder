@@ -256,6 +256,15 @@ function usePersistentState(key, fallback) {
   return [value, setValue];
 }
 
+function readSessionJson(key, fallback) {
+  try {
+    const raw = sessionStorage.getItem(key);
+    return raw ? JSON.parse(raw) : fallback;
+  } catch (error) {
+    return fallback;
+  }
+}
+
 function usePageTitle(title) {
   useEffect(() => {
     document.title = title;
@@ -1121,7 +1130,15 @@ function ProductCard({ slug, product, wished, onToggleWishlist, onAddToCart }) {
 }
 
 function useStoreProducts(slug, search, sort, category) {
-  return useApiData(() => api.get(`/api/store/${slug}/products?search=${encodeURIComponent(search || '')}&sort=${encodeURIComponent(sort || '')}&category=${encodeURIComponent(category || '')}`), [slug, search, sort, category], { products: [] });
+  const cacheKey = `storebanao_products_${slug}_${search || ''}_${sort || ''}_${category || ''}`;
+  const initial = readSessionJson(cacheKey, { products: [] });
+  const state = useApiData(() => api.get(`/api/store/${slug}/products?search=${encodeURIComponent(search || '')}&sort=${encodeURIComponent(sort || '')}&category=${encodeURIComponent(category || '')}`), [slug, search, sort, category], initial);
+  useEffect(() => {
+    if (!state.loading && !state.error) {
+      sessionStorage.setItem(cacheKey, JSON.stringify(state.data));
+    }
+  }, [cacheKey, state.loading, state.error, state.data]);
+  return state;
 }
 
 function StorePage() {
@@ -1131,10 +1148,17 @@ function StorePage() {
   const [cart, setCart] = useStoreCart(slug);
   const [wishlist, setWishlist] = useStoreWishlist(slug);
   const { customer } = useAuth();
-  const storeState = useApiData(() => api.get(`/api/store/${slug}`), [slug], { store: {} });
+  const storeCacheKey = `storebanao_store_${slug}`;
+  const storeState = useApiData(() => api.get(`/api/store/${slug}`), [slug], readSessionJson(storeCacheKey, { store: {} }));
   const productState = useStoreProducts(slug, searchParams.get('search') || '', searchParams.get('sort') || '', searchParams.get('category') || '');
   const store = storeState.data.store || {};
   const products = productState.data.products || [];
+
+  useEffect(() => {
+    if (!storeState.loading && !storeState.error) {
+      sessionStorage.setItem(storeCacheKey, JSON.stringify(storeState.data));
+    }
+  }, [storeCacheKey, storeState.loading, storeState.error, storeState.data]);
 
   function addToCart(product) {
     setCart((prev) => {
