@@ -1,7 +1,34 @@
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+const GET_CACHE_TTL = 30000;
+const getCache = new Map();
+const inflightGets = new Map();
+
+function buildCacheKey(path, token) {
+  return `${path}::${token || ''}`;
+}
+
+function clearGetCache() {
+  getCache.clear();
+  inflightGets.clear();
+}
 
 async function request(path, options = {}) {
+  const method = options.method || 'GET';
   const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData;
+  const cacheKey = method === 'GET' ? buildCacheKey(path, options.token) : '';
+  if (method === 'GET') {
+    const cached = getCache.get(cacheKey);
+    if (cached && (Date.now() - cached.at) < GET_CACHE_TTL) {
+      return cached.data;
+    }
+    if (inflightGets.has(cacheKey)) {
+      return inflightGets.get(cacheKey);
+    }
+  } else {
+    clearGetCache();
+  }
+
+  const runner = (async () => {
   const response = await fetch(`${API_URL}${path}`, {
     credentials: 'include',
     headers: {
@@ -9,7 +36,7 @@ async function request(path, options = {}) {
       ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
       ...(options.headers || {})
     },
-    method: options.method || 'GET',
+    method,
     body: options.body ? (isFormData ? options.body : JSON.stringify(options.body)) : undefined
   });
   const data = await response.json().catch(() => ({}));
@@ -19,7 +46,20 @@ async function request(path, options = {}) {
     error.payload = data;
     throw error;
   }
+  if (method === 'GET') {
+    getCache.set(cacheKey, { at: Date.now(), data });
+  }
   return data;
+  })();
+
+  if (method === 'GET') {
+    inflightGets.set(cacheKey, runner);
+    return runner.finally(() => {
+      inflightGets.delete(cacheKey);
+    });
+  }
+
+  return runner;
 }
 
 export const api = {
