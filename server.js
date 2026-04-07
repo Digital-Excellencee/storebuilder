@@ -328,16 +328,6 @@ if (helmet) {
   }));
 }
 
-// Rate limiting
-if (rateLimit) {
-  const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 20, standardHeaders: true, legacyHeaders: false, message: 'Too many attempts. Try again later.' });
-  const apiLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 300, standardHeaders: true, legacyHeaders: false });
-  app.use('/login', authLimiter);
-  app.use('/register', authLimiter);
-  app.use('/superadmin', authLimiter);
-  app.use('/', apiLimiter);
-}
-
 app.use(express.urlencoded({ extended: true, limit: '15mb' }));
 app.use(express.json({ limit: '15mb' }));
 const allowedOrigins = [
@@ -364,6 +354,24 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
 app.set('trust proxy', 1);
+
+// Rate limiting
+if (rateLimit) {
+  const authLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 100,
+    standardHeaders: true,
+    legacyHeaders: false,
+    skip: (req) => req.path === '/auth/google' || req.path === '/auth/callback' || req.path === '/auth/google/callback',
+    message: 'Too many attempts. Try again later.'
+  });
+  const apiLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 2000, standardHeaders: true, legacyHeaders: false });
+  app.use('/login', authLimiter);
+  app.use('/register', authLimiter);
+  app.use('/superadmin', authLimiter);
+  app.use('/api', apiLimiter);
+}
+
 app.use('/public', express.static(PUBLIC_DIR, { maxAge: '7d', etag: true, lastModified: true }));
 
 const SLOW_REQUEST_MS = Number(process.env.SLOW_REQUEST_MS || 800);
