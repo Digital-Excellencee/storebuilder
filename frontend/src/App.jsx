@@ -569,15 +569,20 @@ function VendorLoginPage() {
   usePageTitle('Vendor Login - StoreBanao');
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { loginVendor, loginVendorWithGoogle } = useAuth();
+  const { loginVendor, hydrateVendorFromToken } = useAuth();
   const [form, setForm] = useState({ email: '', password: '' });
   const [state, setState] = useState({ loading: false, error: '' });
 
   useEffect(() => {
     if (searchParams.get('google') !== '1') return;
+    const token = searchParams.get('token');
+    if (!token) {
+      setState({ loading: false, error: 'Google sign-in could not be completed. Please try again.' });
+      return;
+    }
     let active = true;
     setState({ loading: true, error: '' });
-    loginVendorWithGoogle().then(() => {
+    hydrateVendorFromToken(token).then(() => {
       if (active) navigate('/dashboard', { replace: true });
     }).catch((error) => {
       if (active) setState({ loading: false, error: error.message || 'Google sign-in failed' });
@@ -585,7 +590,7 @@ function VendorLoginPage() {
     return () => {
       active = false;
     };
-  }, [searchParams, loginVendorWithGoogle, navigate]);
+  }, [searchParams, hydrateVendorFromToken, navigate]);
 
   async function submit(event) {
     event.preventDefault();
@@ -624,30 +629,35 @@ function VendorRegisterPage() {
   const googleMode = searchParams.get('google') === '1';
   const missingAccount = searchParams.get('error') === 'account-not-found';
   const { registerVendor, completeVendorGoogleSignup } = useAuth();
-  const [form, setForm] = useState({ name: '', email: '', phone: '', password: '', storeName: '', description: '', templateId: 'app-style' });
+  const [step, setStep] = useState(1);
+  const [form, setForm] = useState({ name: '', email: '', phone: '', password: '', storeName: '', description: '', templateId: 'app-style', plan: 'starter', currency: 'INR', orderMode: 'website', logo: '', banner: '', bannerMobile: '', city: '', state: '', address: '', whatsapp: '', instagram: '', facebook: '' });
   const [state, setState] = useState({ loading: false, error: '' });
   const { data, loading } = useApiData(() => api.get('/api/templates'), [], { templates: [] });
   const templates = data.templates || [];
 
   useEffect(() => {
     if (!googleMode) return;
-    let active = true;
-    api.get('/api/auth/google/profile').then((data) => {
-      if (!active) return;
-      setForm((prev) => ({ ...prev, name: data.profile.name || '', email: data.profile.email || '', phone: '', password: '' }));
-    }).catch((error) => {
-      if (active) setState({ loading: false, error: error.message || 'Google sign-in session expired' });
-    });
-    return () => {
-      active = false;
-    };
-  }, [googleMode]);
+    setForm((prev) => ({ ...prev, name: searchParams.get('name') || prev.name, email: searchParams.get('email') || prev.email, phone: '', password: '' }));
+  }, [googleMode, searchParams]);
+
+  function nextStep() {
+    setStep((prev) => Math.min(5, prev + 1));
+  }
+
+  function prevStep() {
+    setStep((prev) => Math.max(1, prev - 1));
+  }
+
+  function uploadDraftImage(key, event) {
+    saveFileAsDraft(event, (value) => setForm((prev) => ({ ...prev, [key]: value })));
+  }
 
   async function submit(event) {
     event.preventDefault();
     setState({ loading: true, error: '' });
     try {
-      if (googleMode) await completeVendorGoogleSignup({ storeName: form.storeName, description: form.description, templateId: form.templateId });
+      const payload = { ...form };
+      if (googleMode) await completeVendorGoogleSignup(payload);
       else await registerVendor(form);
       navigate('/dashboard');
     } catch (error) {
@@ -658,22 +668,30 @@ function VendorRegisterPage() {
   }
 
   return (
+    <div className="wizard-page">
+      <div className="wizard-shell">
+        <div className="wizard-icon">✦</div>
+        <h1 className="wizard-title">Create Your Store</h1>
+        <p className="wizard-subtitle">Set up your storefront in just a few steps</p>
+        <div className="wizard-progress"><span style={{ width: `${(step / 5) * 100}%` }} /></div>
+        <div className="wizard-steps">{[['Plan', 1], ['Store Info', 2], ['Location', 3], ['Contact', 4], ['Social', 5]].map(([label, number]) => <button key={label} type="button" className={cn('wizard-step-pill', step === number && 'active', step > number && 'done')} onClick={() => setStep(number)}>{step > number ? '✓' : label === 'Plan' ? '▣' : label === 'Store Info' ? '◫' : label === 'Location' ? '⌖' : label === 'Contact' ? '☏' : '◎'} <span>{label}</span></button>)}</div>
+        <div className="wizard-card">
     <AuthShell title="Create your store" subtitle="Quick setup. Fill the basics and go live.">
       {missingAccount ? <Alert type="error">Register account does not exist. Please create your store first.</Alert> : null}
       {state.error ? <Alert type="error">{state.error}</Alert> : null}
       <form onSubmit={submit} className="form-grid">
-        {!googleMode ? <GoogleAuthButton href={`${API_URL}/auth/google?flow=vendor&redirect=%2Fdashboard`} /> : null}
-        <div className="field"><label htmlFor="name">Full Name</label><input id="name" value={form.name} onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))} placeholder="Rahul Sharma" required readOnly={googleMode} /></div>
-        <div className="field"><label htmlFor="email">Email</label><input id="email" type="email" value={form.email} onChange={(event) => setForm((prev) => ({ ...prev, email: event.target.value }))} placeholder="you@email.com" required readOnly={googleMode} /></div>
-        {!googleMode ? <div className="field"><label htmlFor="phone">Phone / WhatsApp</label><input id="phone" value={form.phone} onChange={(event) => setForm((prev) => ({ ...prev, phone: event.target.value }))} placeholder="9876543210" required /></div> : null}
-        {!googleMode ? <div className="field"><label htmlFor="password">Password</label><input id="password" type="password" value={form.password} onChange={(event) => setForm((prev) => ({ ...prev, password: event.target.value }))} placeholder="Minimum 8 characters" required /></div> : null}
-        <div className="field"><label htmlFor="storeName">Store Name</label><input id="storeName" value={form.storeName} onChange={(event) => setForm((prev) => ({ ...prev, storeName: event.target.value }))} placeholder="My Store" required /></div>
-        <div className="slug-preview">Your store URL: <strong>/store/{slugify(form.storeName) || 'your-store'}</strong></div>
-        <div className="field"><label htmlFor="templateId">Template</label><select id="templateId" value={form.templateId} onChange={(event) => setForm((prev) => ({ ...prev, templateId: event.target.value }))}>{loading ? <option>Loading...</option> : templates.map((template) => <option key={template.id} value={template.id}>{template.name}</option>)}</select></div>
-        <div className="field"><label htmlFor="description">Store Description</label><textarea id="description" value={form.description} onChange={(event) => setForm((prev) => ({ ...prev, description: event.target.value }))} placeholder="Best products online" required /></div>
-        <div className="actions"><button className="btn" type="submit" disabled={state.loading}>{state.loading ? 'Creating...' : 'Create Store'}</button><Link className="btn btn-secondary" to="/login">Already have an account?</Link></div>
+        {!googleMode && step === 1 ? <GoogleAuthButton href={`${API_URL}/auth/google?flow=vendor&redirect=%2Fdashboard`} /> : null}
+        {step === 1 ? <><div className="wizard-section-head"><h2>Choose Your Plan</h2><p>Select the plan that fits your business needs</p></div><div className="plan-choice-grid">{[['starter', 'Starter', '₹499', '100 Products'], ['growth', 'Growth', '₹999', 'Unlimited Products']].map(([id, title, price, line], index) => <button key={id} type="button" className={cn('plan-choice-card', form.plan === id && 'active')} onClick={() => setForm((prev) => ({ ...prev, plan: id }))}>{index === 1 ? <span className="plan-most-popular">MOST POPULAR</span> : null}<strong>{title}</strong><span className="plan-choice-price">{price}<small>/month</small></span><span>{line}</span></button>)}</div><div className="wizard-tip">You can upgrade anytime! Start with any plan and upgrade later as your business grows.</div></> : null}
+        {step === 2 ? <><div className="wizard-section-head"><h2>Store Information</h2><p>Tell us about your store</p></div><div className="field"><label htmlFor="storeName">Store Name *</label><input id="storeName" value={form.storeName} onChange={(event) => setForm((prev) => ({ ...prev, storeName: event.target.value }))} placeholder="My Fashion Store" required /></div><div className="field"><label htmlFor="description">Description</label><textarea id="description" value={form.description} onChange={(event) => setForm((prev) => ({ ...prev, description: event.target.value }))} placeholder="Describe your store in a few words..." required /></div><div className="field"><label>Currency</label><select value={form.currency} onChange={(event) => setForm((prev) => ({ ...prev, currency: event.target.value }))}><option value="INR">Indian Rupee (₹)</option></select></div><div className="field"><label>How do you want to take orders?</label><div className="wizard-radio-stack">{[['whatsapp', 'WhatsApp Orders', 'Customers order via WhatsApp messages'], ['website', 'Website Orders', 'Customers checkout directly on your site'], ['both', 'Both WhatsApp & Website', 'Let customers choose their preferred way']].map(([id, title, text]) => <button key={id} type="button" className={cn('wizard-radio-card', form.orderMode === id && 'active')} onClick={() => setForm((prev) => ({ ...prev, orderMode: id }))}><strong>{title}</strong><span>{text}</span></button>)}</div></div><div className="wizard-upload-grid"><div className="field"><label>Logo</label><label className="wizard-upload-box"><input type="file" accept="image/*" onChange={(event) => uploadDraftImage('logo', event)} hidden />{form.logo ? <img src={form.logo} alt="Logo" /> : <span>Upload logo</span>}</label></div><div className="field"><label>Banner</label><label className="wizard-upload-box wide"><input type="file" accept="image/*" onChange={(event) => uploadDraftImage('banner', event)} hidden />{form.banner ? <img src={form.banner} alt="Banner" /> : <span>Upload banner</span>}</label></div><div className="field wizard-upload-full"><label>Mobile Hero Banner (optional)</label><label className="wizard-upload-box wide"><input type="file" accept="image/*" onChange={(event) => uploadDraftImage('bannerMobile', event)} hidden />{form.bannerMobile ? <img src={form.bannerMobile} alt="Mobile banner" /> : <span>Upload mobile hero image</span>}</label></div></div></> : null}
+        {step === 3 ? <><div className="wizard-section-head"><h2>Location Details</h2><p>Help customers find you</p></div><div className="wizard-tip">All fields here are optional - you can skip ahead!</div><div className="form-grid two"><div className="field"><label>City</label><input value={form.city} onChange={(event) => setForm((prev) => ({ ...prev, city: event.target.value }))} placeholder="Mumbai" /></div><div className="field"><label>State / Region</label><input value={form.state} onChange={(event) => setForm((prev) => ({ ...prev, state: event.target.value }))} placeholder="Maharashtra" /></div></div><div className="field"><label>Full Address</label><textarea value={form.address} onChange={(event) => setForm((prev) => ({ ...prev, address: event.target.value }))} placeholder="123 Main Street, Building A, Floor 2..." /></div><div className="wizard-tip">Stores with a location get more trust from customers and appear more professional.</div></> : null}
+        {step === 4 ? <><div className="wizard-section-head"><h2>Contact Details</h2><p>How customers can reach you</p></div><div className="wizard-tip">Only email is required - WhatsApp is optional unless you choose WhatsApp orders</div><div className="field"><label>WhatsApp Number</label><input value={form.whatsapp} onChange={(event) => setForm((prev) => ({ ...prev, whatsapp: event.target.value }))} placeholder="+91 98765 43210" /></div><div className="field"><label>Your Email *</label><input type="email" value={form.email} onChange={(event) => setForm((prev) => ({ ...prev, email: event.target.value }))} readOnly={googleMode} required /></div>{!googleMode ? <><div className="field"><label>Full Name</label><input value={form.name} onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))} required /></div><div className="field"><label>Password</label><input type="password" value={form.password} onChange={(event) => setForm((prev) => ({ ...prev, password: event.target.value }))} placeholder="Minimum 8 characters" required /></div><div className="field"><label>Phone / WhatsApp</label><input value={form.phone} onChange={(event) => setForm((prev) => ({ ...prev, phone: event.target.value }))} placeholder="9876543210" required /></div></> : null}<div className="wizard-tip">{form.orderMode === 'website' ? 'Website ordering: Customers will see a Buy Now button and checkout directly on your website.' : form.orderMode === 'whatsapp' ? 'WhatsApp ordering: Customers will contact you directly on WhatsApp.' : 'Both ordering modes: Customers can choose website checkout or WhatsApp.'}</div></> : null}
+        {step === 5 ? <><div className="wizard-section-head"><h2>Social Media</h2><p>Connect your social accounts</p></div><div className="wizard-tip">Both are optional - you can add them later from Settings</div><div className="field"><label>Instagram</label><input value={form.instagram} onChange={(event) => setForm((prev) => ({ ...prev, instagram: event.target.value }))} placeholder="https://instagram.com/yourstore" /></div><div className="field"><label>Facebook</label><input value={form.facebook} onChange={(event) => setForm((prev) => ({ ...prev, facebook: event.target.value }))} placeholder="https://facebook.com/yourstore" /></div><div className="wizard-summary-box"><strong>Launching with {form.plan === 'growth' ? 'Growth' : 'Starter'} plan</strong><span>{form.plan === 'growth' ? '₹999/month • Unlimited products' : '₹499/month • 100 products'}</span></div><div className="wizard-tip">You're all set! Click Launch My Store to create your store. You can always update everything later.</div></> : null}
+        <div className="wizard-actions"><div className="actions">{step > 1 ? <button className="btn btn-secondary" type="button" onClick={prevStep}>Back</button> : <Link className="btn btn-secondary" to="/login">Already have an account?</Link>}</div><div className="actions">{step < 5 ? <button className="btn" type="button" onClick={nextStep}>Next</button> : <button className="btn" type="submit" disabled={state.loading}>{state.loading ? 'Launching...' : 'Launch My Store'}</button>}</div></div>
       </form>
     </AuthShell>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -1197,9 +1215,12 @@ function ProductCard({ slug, product, wished, onToggleWishlist, onAddToCart }) {
   );
 }
 
-function useStoreProducts(slug, search, sort, category) {
+function useStoreProducts(slug, search, sort, category, initialProducts) {
   const cacheKey = `storebanao_products_${slug}_${search || ''}_${sort || ''}_${category || ''}`;
-  const initial = readSessionJson(cacheKey, { products: [] });
+  const baseInitial = (!search && !sort && !category && Array.isArray(initialProducts) && initialProducts.length)
+    ? { products: initialProducts }
+    : { products: [] };
+  const initial = readSessionJson(cacheKey, baseInitial);
   const state = useApiData(() => api.get(`/api/store/${slug}/products?search=${encodeURIComponent(search || '')}&sort=${encodeURIComponent(sort || '')}&category=${encodeURIComponent(category || '')}`), [slug, search, sort, category], initial);
   useEffect(() => {
     if (!state.loading && !state.error) {
@@ -1218,8 +1239,8 @@ function StorePage() {
   const { customer } = useAuth();
   const storeCacheKey = `storebanao_store_${slug}`;
   const storeState = useApiData(() => api.get(`/api/store/${slug}`), [slug], readSessionJson(storeCacheKey, { store: {} }));
-  const productState = useStoreProducts(slug, searchParams.get('search') || '', searchParams.get('sort') || '', searchParams.get('category') || '');
   const store = storeState.data.store || {};
+  const productState = useStoreProducts(slug, searchParams.get('search') || '', searchParams.get('sort') || '', searchParams.get('category') || '', store.initialProducts || []);
   const products = productState.data.products || [];
 
   useEffect(() => {
@@ -1368,15 +1389,20 @@ function CustomerLoginPage() {
   const { slug } = useParams();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { loginCustomer, loginCustomerWithGoogle } = useAuth();
+  const { loginCustomer, hydrateCustomerFromToken } = useAuth();
   const [form, setForm] = useState({ email: '', password: '' });
   const [state, setState] = useState({ loading: false, error: '' });
   usePageTitle('Customer Login - StoreBanao');
   useEffect(() => {
     if (searchParams.get('google') !== '1') return;
+    const token = searchParams.get('token');
+    if (!token) {
+      setState({ loading: false, error: 'Google sign-in could not be completed. Please try again.' });
+      return;
+    }
     let active = true;
     setState({ loading: true, error: '' });
-    loginCustomerWithGoogle(slug).then(() => {
+    hydrateCustomerFromToken(slug, token).then(() => {
       if (active) navigate(`/store/${slug}/account`, { replace: true });
     }).catch((error) => {
       if (active) setState({ loading: false, error: error.message || 'Google login failed' });
@@ -1384,7 +1410,7 @@ function CustomerLoginPage() {
     return () => {
       active = false;
     };
-  }, [searchParams, loginCustomerWithGoogle, slug, navigate]);
+  }, [searchParams, hydrateCustomerFromToken, slug, navigate]);
   async function submit(event) {
     event.preventDefault();
     setState({ loading: true, error: '' });

@@ -129,6 +129,51 @@ function sanitizeApiProduct(body) {
   };
 }
 
+function buildStoreFromSignupPayload(payload, slug, ownerId, createdAt) {
+  const orderMode = ['whatsapp', 'website', 'both'].includes(String(payload.orderMode || '').trim()) ? String(payload.orderMode || '').trim() : 'website';
+  return {
+    slug,
+    ownerId,
+    name: String(payload.storeName || '').trim(),
+    description: String(payload.description || '').trim(),
+    whatsapp: String(payload.whatsapp || payload.phone || '').trim(),
+    logo: String(payload.logo || '').trim(),
+    template: String(payload.templateId || 'app-style').trim() || 'app-style',
+    theme: 'default',
+    themeConfig: {
+      bannerImages: payload.banner ? [String(payload.banner).trim()] : [],
+      bannerImagesMobile: payload.bannerMobile ? [String(payload.bannerMobile).trim()] : []
+    },
+    products: [],
+    orders: [],
+    customers: {},
+    visits: 0,
+    createdAt,
+    socialLinks: {
+      instagram: String(payload.instagram || '').trim(),
+      facebook: String(payload.facebook || '').trim()
+    },
+    storeSettings: {
+      signupFlow: {
+        plan: String(payload.plan || 'starter').trim(),
+        currency: String(payload.currency || 'INR').trim(),
+        orderMode
+      },
+      storeDetails: {
+        address: String(payload.address || '').trim(),
+        phone: String(payload.phone || '').trim(),
+        email: String(payload.email || '').trim().toLowerCase(),
+        socialLinks: {
+          instagram: String(payload.instagram || '').trim(),
+          facebook: String(payload.facebook || '').trim()
+        },
+        city: String(payload.city || '').trim(),
+        state: String(payload.state || '').trim()
+      }
+    }
+  };
+}
+
 function getVendorStoreFromReq(db, req) {
   const user = getApiUser(db, req.apiUserEmail);
   return user ? getApiStore(db, user.storeSlug) : null;
@@ -543,8 +588,8 @@ app.post('/api/auth/google/complete', async (req, res) => {
     let slug = slugify(storeName);
     while (db.stores[slug]) slug = `${slugify(storeName)}-${Math.floor(Math.random() * 9000 + 1000)}`;
     const createdAt = new Date().toISOString();
-    db.users[profile.email] = { id: profile.email, email: profile.email, name: profile.name, phone: '', passwordHash: '', storeSlug: slug, createdAt, authProvider: 'google', emailVerified: true };
-    db.stores[slug] = { slug, ownerId: profile.email, name: storeName, description, whatsapp: '', logo: '', template: templateId, theme: 'default', themeConfig: {}, products: [], orders: [], customers: {}, visits: 0, createdAt };
+    db.users[profile.email] = { id: profile.email, email: profile.email, name: profile.name, phone: String(req.body.phone || req.body.whatsapp || '').trim(), passwordHash: '', storeSlug: slug, createdAt, authProvider: 'google', emailVerified: true };
+    db.stores[slug] = buildStoreFromSignupPayload({ ...req.body, storeName, description, templateId, email: profile.email, name: profile.name }, slug, profile.email, createdAt);
     await saveDB(db);
     delete req.session.googleAuth;
     res.json({ success: true, token: generateToken(db.users[profile.email]), user: { id: profile.email, email: profile.email, name: profile.name, storeSlug: slug }, store: { slug, name: storeName } });
@@ -584,22 +629,7 @@ app.post('/api/auth/register', async (req, res) => {
       storeSlug: slug,
       createdAt
     };
-    db.stores[slug] = {
-      slug,
-      ownerId: email,
-      name: storeName,
-      description,
-      whatsapp: phone || '',
-      logo: '',
-      template: templateId || 'app-style',
-      theme: 'default',
-      themeConfig: {},
-      products: [],
-      orders: [],
-      customers: {},
-      visits: 0,
-      createdAt
-    };
+    db.stores[slug] = buildStoreFromSignupPayload({ ...req.body, storeName, description, templateId, email, phone, name }, slug, email, createdAt);
     await saveDB(db);
     const token = generateToken(db.users[email]);
     res.json({
@@ -654,6 +684,9 @@ app.get('/api/store/:slug', async (req, res) => {
       return res.status(404).json({ success: false, error: 'Store not found' });
     }
     store.visits = (parseInt(store.visits, 10) || 0) + 1;
+    const initialProducts = (store.products || [])
+      .filter((product) => product.active !== false)
+      .slice(0, 12);
     res.json({
       success: true,
       store: {
@@ -667,6 +700,8 @@ app.get('/api/store/:slug', async (req, res) => {
         themeConfig: store.themeConfig,
         storeSettings: store.storeSettings,
         categories: store.categories || [],
+        initialProducts,
+        totalProducts: (store.products || []).filter((product) => product.active !== false).length,
         visits: store.visits,
         createdAt: store.createdAt
       }

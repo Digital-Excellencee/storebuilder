@@ -87,6 +87,12 @@ export function AuthProvider({ children }) {
       setVendor(next);
       return data;
     },
+    async hydrateVendorFromToken(token) {
+      const data = await api.get('/api/auth/me', token);
+      const next = { token, user: data.user, store: data.store };
+      setVendor(next);
+      return next;
+    },
     async registerVendor(payload) {
       const data = await api.post('/api/auth/register', payload);
       const next = { token: data.token, user: data.user, store: data.store };
@@ -110,6 +116,12 @@ export function AuthProvider({ children }) {
       const data = await api.post(`/api/store/${slug}/auth/login`, payload);
       setCustomer({ token: data.token, slug, customer: data.customer });
       return data;
+    },
+    async hydrateCustomerFromToken(slug, token) {
+      const data = await api.get(`/api/store/${slug}/auth/me`, token);
+      const next = { token, slug, customer: data.customer };
+      setCustomer(next);
+      return next;
     },
     async registerCustomer(slug, payload) {
       const data = await api.post(`/api/store/${slug}/auth/register`, payload);

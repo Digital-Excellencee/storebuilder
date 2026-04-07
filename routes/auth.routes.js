@@ -1,5 +1,6 @@
-﻿const express = require('express');
+const express = require('express');
 const crypto = require('crypto');
+const jwt = require('jsonwebtoken');
 const { createClient } = require('@supabase/supabase-js');
 const router = express.Router();
 const { loadDB, saveDB, saveUploadedFile, runUploader, removeStoredFile, findMerchantUserByEmail, findStoreCustomerByEmail, saveMerchantAndStoreFast, saveStoreCustomerFast } = require('../services/db');
@@ -91,6 +92,16 @@ function getPendingGoogleProfile(req) {
   const name = String(req.session.googleAuth.name || '').trim();
   if (!email || !validateEmail(email)) return null;
   return { email, name: name || email };
+}
+
+function createVendorHandoffToken(user) {
+  const secret = process.env.JWT_SECRET || process.env.SESSION_SECRET;
+  return jwt.sign({ userId: user.id, email: user.email, role: 'vendor' }, secret, { expiresIn: '10m' });
+}
+
+function createCustomerHandoffToken(customer, slug) {
+  const secret = process.env.JWT_SECRET || process.env.SESSION_SECRET;
+  return jwt.sign({ customerId: customer.id, email: customer.email, storeSlug: slug, role: 'customer' }, secret, { expiresIn: '10m' });
 }
 
 function createEmailVerificationState(verified) {
@@ -196,21 +207,20 @@ router.get('/auth/callback', route(async (req, res) => {
       sendCustomerWelcomeEmail(customer, store).catch(console.error);
       sendAdminNewUserAlert(customer, 'customer', store).catch(console.error);
     }
-    req.session.googleCustomerAuth = { storeSlug, email, name };
     setLoggedCustomer(req, storeSlug, email);
-    res.redirect(`${getFrontendBaseUrl(req)}/store/${encodeURIComponent(storeSlug)}/account/login?google=1`);
+    const handoff = createCustomerHandoffToken(customer, storeSlug);
+    res.redirect(`${getFrontendBaseUrl(req)}/store/${encodeURIComponent(storeSlug)}/account/login?google=1&token=${encodeURIComponent(handoff)}`);
     return;
   }
 
   const db = await loadDB();
   const existingUser = db.users[email];
   if (existingUser && existingUser.storeSlug && db.stores[existingUser.storeSlug]) {
-    req.session.googleAuth = { email, name, provider: 'google' };
-    res.redirect(`${getFrontendBaseUrl(req)}/login?google=1`);
+    const handoff = createVendorHandoffToken(existingUser);
+    res.redirect(`${getFrontendBaseUrl(req)}/login?google=1&token=${encodeURIComponent(handoff)}`);
     return;
   }
-  req.session.googleAuth = { email, name, provider: 'google' };
-  res.redirect(`${getFrontendBaseUrl(req)}/register?google=1`);
+  res.redirect(`${getFrontendBaseUrl(req)}/register?google=1&email=${encodeURIComponent(email)}&name=${encodeURIComponent(name)}`);
 }));
 
 router.get('/', route(async (req, res) => {
