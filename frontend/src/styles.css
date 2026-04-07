@@ -318,6 +318,10 @@ th { font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: 
 .app-sort { min-width: 180px; }
 .app-style-filter-btn { width: 56px; height: 56px; border-radius: 50%; border: 0; background: #1b2130; color: #fff; font-size: 24px; box-shadow: 0 16px 30px rgba(27,33,48,.22); }
 .app-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.app-collection-strip { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.app-collection-card { padding: 16px; border-radius: 20px; border: 1px solid var(--border); background: #fff; box-shadow: 0 10px 24px rgba(15,23,42,.05); display: grid; gap: 6px; }
+.app-collection-card strong { font-size: 16px; }
+.app-collection-card span { color: #64748b; font-size: 13px; line-height: 1.5; }
 .app-card { background: #fff; border-radius: 24px; overflow: hidden; border: 1px solid var(--border); display: flex; flex-direction: column; box-shadow: 0 18px 34px rgba(15,23,42,.06); }
 .app-style-product-card { border-radius: 18px; box-shadow: 0 10px 24px rgba(15,23,42,.08); }
 .app-style-product-card .app-card-body { gap: 4px; }
