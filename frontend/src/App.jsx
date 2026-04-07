@@ -594,6 +594,10 @@ function VendorLoginPage() {
       await loginVendor(form);
       navigate('/dashboard');
     } catch (error) {
+      if (error && error.status === 404) {
+        navigate('/register?error=account-not-found', { replace: true });
+        return;
+      }
       setState({ loading: false, error: error.message || 'Login failed' });
       return;
     }
@@ -618,6 +622,7 @@ function VendorRegisterPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const googleMode = searchParams.get('google') === '1';
+  const missingAccount = searchParams.get('error') === 'account-not-found';
   const { registerVendor, completeVendorGoogleSignup } = useAuth();
   const [form, setForm] = useState({ name: '', email: '', phone: '', password: '', storeName: '', description: '', templateId: 'app-style' });
   const [state, setState] = useState({ loading: false, error: '' });
@@ -654,6 +659,7 @@ function VendorRegisterPage() {
 
   return (
     <AuthShell title="Create your store" subtitle="Quick setup. Fill the basics and go live.">
+      {missingAccount ? <Alert type="error">Register account does not exist. Please create your store first.</Alert> : null}
       {state.error ? <Alert type="error">{state.error}</Alert> : null}
       <form onSubmit={submit} className="form-grid">
         {!googleMode ? <GoogleAuthButton href={`${API_URL}/auth/google?flow=vendor&redirect=%2Fdashboard`} /> : null}
@@ -1386,6 +1392,10 @@ function CustomerLoginPage() {
       await loginCustomer(slug, form);
       navigate(`/store/${slug}/account`);
     } catch (error) {
+      if (error && error.status === 404) {
+        navigate(`/store/${slug}/account/register?error=account-not-found`, { replace: true });
+        return;
+      }
       setState({ loading: false, error: error.message || 'Login failed' });
       return;
     }
@@ -1397,6 +1407,8 @@ function CustomerLoginPage() {
 function CustomerRegisterPage() {
   const { slug } = useParams();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const missingAccount = searchParams.get('error') === 'account-not-found';
   const { registerCustomer } = useAuth();
   const [form, setForm] = useState({ name: '', email: '', phone: '', password: '' });
   const [state, setState] = useState({ loading: false, error: '' });
@@ -1413,7 +1425,7 @@ function CustomerRegisterPage() {
     }
     setState({ loading: false, error: '' });
   }
-  return <AuthShell title="Create customer account" subtitle="Save your details, wishlist, and order history.">{state.error ? <Alert type="error">{state.error}</Alert> : null}<form className="form-grid" onSubmit={submit}><GoogleAuthButton href={`${API_URL}/auth/google?flow=customer&store=${encodeURIComponent(slug)}&redirect=${encodeURIComponent(`/store/${slug}/account`)}`} /><div className="field"><label>Name</label><input value={form.name} onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))} required /></div><div className="field"><label>Email</label><input type="email" value={form.email} onChange={(event) => setForm((prev) => ({ ...prev, email: event.target.value }))} required /></div><div className="field"><label>Phone</label><input value={form.phone} onChange={(event) => setForm((prev) => ({ ...prev, phone: event.target.value }))} required /></div><div className="field"><label>Password</label><input type="password" value={form.password} onChange={(event) => setForm((prev) => ({ ...prev, password: event.target.value }))} required /></div><div className="actions"><button className="btn" type="submit" disabled={state.loading}>{state.loading ? 'Creating...' : 'Create account'}</button><Link className="btn btn-secondary" to={`/store/${slug}/account/login`}>Already have an account?</Link></div></form></AuthShell>;
+  return <AuthShell title="Create customer account" subtitle="Save your details, wishlist, and order history.">{missingAccount ? <Alert type="error">Register account does not exist. Please create your account first.</Alert> : null}{state.error ? <Alert type="error">{state.error}</Alert> : null}<form className="form-grid" onSubmit={submit}><GoogleAuthButton href={`${API_URL}/auth/google?flow=customer&store=${encodeURIComponent(slug)}&redirect=${encodeURIComponent(`/store/${slug}/account`)}`} /><div className="field"><label>Name</label><input value={form.name} onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))} required /></div><div className="field"><label>Email</label><input type="email" value={form.email} onChange={(event) => setForm((prev) => ({ ...prev, email: event.target.value }))} required /></div><div className="field"><label>Phone</label><input value={form.phone} onChange={(event) => setForm((prev) => ({ ...prev, phone: event.target.value }))} required /></div><div className="field"><label>Password</label><input type="password" value={form.password} onChange={(event) => setForm((prev) => ({ ...prev, password: event.target.value }))} required /></div><div className="actions"><button className="btn" type="submit" disabled={state.loading}>{state.loading ? 'Creating...' : 'Create account'}</button><Link className="btn btn-secondary" to={`/store/${slug}/account/login`}>Already have an account?</Link></div></form></AuthShell>;
 }
 
 function CustomerAccountPage() {

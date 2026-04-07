@@ -453,7 +453,10 @@ app.post('/api/auth/login', async (req, res) => {
     }
     const db = await loadDB();
     const user = db.users[email];
-    if (!user || !verifyPassword(password, user.passwordHash)) {
+    if (!user) {
+      return res.status(404).json({ success: false, error: 'Account does not exist' });
+    }
+    if (!verifyPassword(password, user.passwordHash)) {
       return res.status(401).json({ success: false, error: 'Invalid email or password' });
     }
     const store = db.stores[user.storeSlug];
@@ -1601,7 +1604,10 @@ app.post('/api/store/:slug/auth/login', async (req, res) => {
     const email = String(req.body.email || '').trim().toLowerCase();
     const password = String(req.body.password || '');
     const customer = store.customers && store.customers[email];
-    if (!customer || !verifyPassword(password, customer.passwordHash)) {
+    if (!customer) {
+      return res.status(404).json({ success: false, error: 'Account does not exist' });
+    }
+    if (!verifyPassword(password, customer.passwordHash)) {
       return res.status(401).json({ success: false, error: 'Invalid email or password' });
     }
     res.json({ success: true, token: generateCustomerToken(customer, slug), customer: { id: customer.id, email: customer.email, name: customer.name, phone: customer.phone, addresses: customer.addresses || [], wishlist: customer.wishlist || [], orders: customer.orders || [] } });
