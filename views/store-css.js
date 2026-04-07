@@ -314,9 +314,86 @@ function getThemeCSS(template, theme, cfg) {
   .app-banner-dots { position:absolute; bottom:12px; right:16px; display:flex; gap:6px; z-index:2; }
   .app-banner-dot { width:8px; height:8px; border-radius:50%; background:rgba(255,255,255,.35); border:0; cursor:pointer; }
   .app-banner-dot.active { background:#fff; }
+  .store-page { max-width:480px; margin:0 auto; box-shadow:0 0 60px rgba(0,0,0,.14); padding-bottom:96px; }
+  .store-wrap { width:calc(100% - 24px); padding:0 0 24px; }
+  .app-header { background:${cardBg}; border-bottom:1px solid ${border}; }
+  .top-bar { padding:9px 0; background:#151922; color:#f8fafc; font-size:11px; letter-spacing:.08em; text-transform:uppercase; overflow:hidden; }
+  .top-bar-track { display:flex; gap:28px; width:max-content; animation:topbar-scroll 18s linear infinite; }
+  .top-bar-text::after { content:'•'; margin-left:28px; opacity:.45; }
+  .app-header-premium { grid-template-columns:44px 1fr auto; padding:12px 16px 10px; gap:10px; border-bottom:0; }
+  .app-icon-btn.ghost { width:38px; height:38px; border:0; background:transparent; border-radius:50%; font-size:20px; }
+  .app-logo, .app-logo-ph { width:40px; height:40px; border-radius:12px; }
+  .app-brand-lockup span { font-size:17px; font-weight:900; letter-spacing:-.02em; }
+  .app-actions { gap:8px; }
+  .app-icon-btn { width:38px; height:38px; border-radius:50%; border:1px solid #dbe3ef; background:#fff; }
+  .app-badge { background:#ef4444; }
+  .app-search-section { padding:10px 16px 12px; }
+  .app-search-shell { grid-template-columns:1fr 48px; gap:10px; }
+  .app-search-form { min-height:48px; border-radius:999px; background:#f1efff; border:1px solid #ece7ff; }
+  .app-filter-btn { width:48px; height:48px; border-radius:50%; background:#1b2130; box-shadow:0 12px 24px rgba(27,33,48,.22); }
+  .cat-scroll { grid-auto-flow:column; grid-auto-columns:max-content; gap:14px; overflow:auto; padding:8px 16px 8px; margin:0; }
+  .cat-item { min-width:72px; gap:6px; }
+  .cat-icon { width:66px; height:66px; border-radius:50%; border:2px solid #e5e7eb; box-shadow:0 6px 14px rgba(15,23,42,.08); background:#eef2ff; }
+  .cat-item:hover .cat-icon { transform:none; box-shadow:0 8px 18px rgba(17,24,39,.2); border-color:#111827; }
+  .cat-label { font-size:11px; letter-spacing:.02em; max-width:72px; }
+  .app-feature-hero { margin:8px auto 0; width:calc(100% - 16px); min-height:420px; border-radius:20px; box-shadow:0 20px 48px rgba(15,23,42,.22); }
+  .app-feature-media, .app-feature-media img { min-height:420px; aspect-ratio:.82/1; object-position:center top; }
+  .app-feature-overlay { padding:28px 24px; gap:8px; background:linear-gradient(180deg,rgba(7,11,19,.04),rgba(7,11,19,.68)); }
+  .app-feature-overlay h1 { max-width:12ch; text-shadow:0 8px 20px rgba(0,0,0,.3); }
+  .app-feature-overlay p { max-width:30ch; }
+  .btn, .btn-secondary { min-height:44px; border-radius:999px; font-size:13px; }
+  .app-section { padding:20px 0 0; }
+  .app-rail-head { padding:0 4px; margin-bottom:14px; }
+  .app-section-title { font-size:20px; }
+  .section-label-row { display:flex; align-items:center; gap:8px; }
+  .section-flame { font-size:20px; }
+  .app-horizontal-cards { display:flex; gap:12px; overflow-x:auto; padding-bottom:4px; scroll-snap-type:x mandatory; }
+  .app-horizontal-cards .app-card { min-width:185px; scroll-snap-align:start; }
+  .app-grid { grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+  .app-card { border-radius:18px; border:1px solid #e5e7eb; box-shadow:0 8px 24px rgba(15,23,42,.07); }
+  .app-card-img { aspect-ratio:.85/1; }
+  .app-sale-badge { top:10px; left:10px; padding:5px 9px; font-size:10px; }
+  .app-theme-heart { position:absolute; top:10px; right:10px; width:28px; height:28px; border-radius:50%; border:0; background:rgba(255,255,255,.95); color:#111827; display:grid; place-items:center; z-index:3; box-shadow:0 4px 12px rgba(15,23,42,.12); font-size:14px; }
+  .app-theme-heart.wishlist-active { color:#dc2626; background:rgba(239,68,68,.12); }
+  .app-card-body { padding:10px 12px 8px; gap:4px; }
+  .app-card-body h3 { font-size:13px; min-height:34px; font-family:${bodyFont},system-ui,sans-serif; }
+  .app-card-body .price { font-size:15px; }
+  .app-card-body .old-price { font-size:11px; }
+  .app-off-pill { display:inline-flex; align-items:center; padding:3px 7px; border-radius:999px; background:#16a34a; color:#fff; font-size:10px; font-weight:900; }
+  .stock { font-size:10px; background:${primary}14; padding:4px 7px; }
+  .app-card-rating { margin-left:auto; font-size:11px; font-weight:800; color:#f59e0b; }
+  .app-card-actions { grid-template-columns:1fr; padding:0 10px 10px; }
+  .app-theme-one-btn, .primary-btn.app-theme-one-btn { width:100%; min-height:38px; border-radius:10px; background:#0f1117; color:#fff; box-shadow:none; font-size:11px; letter-spacing:.05em; text-transform:uppercase; }
+  .view-all-wrap { display:flex; justify-content:center; margin:18px 0 0; }
+  .view-all-btn { display:inline-flex; align-items:center; justify-content:center; min-height:46px; padding:0 28px; border-radius:12px; border:0; background:#111827; color:#fff; font-weight:800; font-size:13px; text-decoration:none; }
+  .trust-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:10px; margin-top:24px; padding:16px; border-radius:18px; background:#0d0d0d; }
+  .trust-card { padding:14px; border-radius:14px; background:#1a1a1a; color:#fff; display:flex; flex-direction:column; gap:5px; }
+  .trust-icon { font-size:22px; margin-bottom:2px; }
+  .trust-card strong { font-size:13px; font-weight:800; color:#f9fafb; }
+  .trust-card span { color:#888; font-size:11px; line-height:1.4; }
+  .insta-section { margin-top:20px; padding:18px 16px; border-radius:18px; background:#fff; box-shadow:0 8px 24px rgba(15,23,42,.05); }
+  .insta-head { display:flex; align-items:center; gap:10px; margin-bottom:12px; }
+  .insta-icon { width:36px; height:36px; border-radius:10px; background:linear-gradient(135deg,#f09433,#e6683c,#dc2743,#cc2366,#bc1888); display:grid; place-items:center; color:#fff; font-size:18px; }
+  .insta-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:4px; border-radius:12px; overflow:hidden; }
+  .insta-ph { width:100%; aspect-ratio:1; background:linear-gradient(135deg,#1a1a2e,#16213e); display:flex; align-items:center; justify-content:center; color:#fff; font-size:22px; }
+  .insta-btn { display:flex; align-items:center; justify-content:center; margin:14px auto 0; min-height:44px; padding:0 24px; border-radius:10px; border:0; background:#111827; color:#fff; font-weight:800; font-size:13px; text-decoration:none; }
+  .store-footer.app-theme-footer { margin-top:20px; padding:24px 20px 100px; background:#0d0d0d; color:#fff; border-radius:22px 22px 0 0; text-align:left; }
+  .footer-brand-row { display:flex; align-items:center; gap:10px; margin-bottom:16px; }
+  .footer-logo-ph { width:36px; height:36px; border-radius:10px; background:linear-gradient(135deg,#3b1fa0,#6c47ff); display:grid; place-items:center; color:#fff; font-size:18px; font-weight:900; }
+  .footer-brand-name { font-size:17px; font-weight:900; color:#fff; }
+  .footer-desc { font-size:12px; color:#888; margin-bottom:18px; line-height:1.6; }
+  .footer-cols { display:grid; grid-template-columns:1fr 1fr; gap:18px; margin-bottom:20px; }
+  .footer-col h4 { font-size:12px; font-weight:800; color:#888; text-transform:uppercase; letter-spacing:.08em; margin-bottom:10px; }
+  .footer-col ul { list-style:none; padding:0; display:grid; gap:8px; }
+  .footer-col ul li a { font-size:13px; color:rgba(255,255,255,.65); text-decoration:none; }
+  .footer-bottom { padding-top:16px; border-top:1px solid rgba(255,255,255,.07); display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap; }
+  .footer-bottom span { font-size:11px; color:#555; }
+  .app-bottom-nav { left:50%; transform:translateX(-50%); width:calc(min(480px,100%) - 20px); bottom:10px; gap:4px; border-radius:22px; padding:8px; }
+  .app-bottom-nav a, .app-bottom-nav button { border-radius:14px; font-size:10px; }
+  .app-bottom-nav a.active, .app-bottom-nav button.active { color:#111827; background:#f4f4f5; }
   @media (max-width: 920px) { .store-grid { grid-template-columns:repeat(2, minmax(0,1fr)); } .app-service-grid { grid-template-columns:1fr 1fr 1fr; } }
   @media (max-width: 760px) { .app-banner-slide-mobile { display:block; } .app-banner-slide:not(.app-banner-slide-mobile) { display:none; } }
-  @media (max-width: 640px) { .store-wrap { width:min(100%, calc(100% - 20px)); } .app-feature-hero { min-height:440px; } .app-feature-media, .app-feature-media img { min-height:440px; } .store-header { grid-template-columns:1fr; } .store-grid { grid-template-columns:1fr 1fr; } .app-grid { grid-template-columns:1fr 1fr; } .product-detail, .checkout-layout { grid-template-columns:1fr; } .checkout-steps { grid-template-columns:1fr; } .store-hero-actions { justify-content:flex-start; } .app-service-grid { grid-template-columns:1fr; } .app-product-actions { grid-template-columns:1fr 1fr auto; } .app-sticky-buybar { grid-template-columns:1fr 1fr; bottom:84px; } .app-sticky-buybar > div:first-child { grid-column:1 / -1; } .app-bottom-nav { display:flex; } .app-float-wa { bottom:154px; } }
+  @media (max-width: 640px) { .store-wrap { width:min(100%, calc(100% - 20px)); } .app-feature-hero { min-height:440px; } .app-feature-media, .app-feature-media img { min-height:440px; } .store-header { grid-template-columns:1fr; } .store-grid { grid-template-columns:1fr 1fr; } .app-grid { grid-template-columns:1fr 1fr; } .product-detail, .checkout-layout { grid-template-columns:1fr; } .checkout-steps { grid-template-columns:1fr; } .store-hero-actions { justify-content:flex-start; } .app-service-grid { grid-template-columns:1fr; } .app-product-actions { grid-template-columns:1fr 1fr auto; } .app-sticky-buybar { grid-template-columns:1fr 1fr; bottom:84px; } .app-sticky-buybar > div:first-child { grid-column:1 / -1; } .app-bottom-nav { display:flex; } .app-float-wa { bottom:154px; } .footer-cols { grid-template-columns:1fr; } }
   @media (max-width: 420px) { .app-grid, .store-grid { grid-template-columns:1fr 1fr; gap:12px; } .app-card-body h3 { font-size:14px; } .app-feature-overlay h1 { font-size:34px; } }
   ${customCss}`;
   }

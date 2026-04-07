@@ -48,8 +48,8 @@ function renderAppStyleStore(store, slug, data) {
   const flashDeals = cfg.showFlashDeals !== false && products.slice(0, 4).length ? `
     <section class="app-section">
       <div class="app-rail-head">
-        <div><span class="app-eyebrow">Trending now</span><h2 class="app-section-title">Fast moving picks</h2></div>
-        <a href="${base || '/'}?sort=newest">View all</a>
+        <div class="section-label-row"><span class="section-flame">🔥</span><h2 class="app-section-title">Best Selling</h2></div>
+        <a href="${base || '/'}?sort=newest">View All</a>
       </div>
       <div class="app-horizontal-cards">${products.slice(0, 4).map((product) => renderAppProductCard(product, {
         base,
@@ -60,18 +60,21 @@ function renderAppStyleStore(store, slug, data) {
       })).join('')}</div>
     </section>` : '';
   const content = `
-    ${hero}
     ${catScroll}
+    ${hero}
     ${flashDeals}
     <section class="app-section">
       <div class="app-rail-head">
-        <div><span class="app-eyebrow">Curated for mobile shoppers</span><h2 class="app-section-title">${escapeHtml(productsTitle)}</h2></div>
+        <div class="section-label-row"><span class="section-flame">⭐</span><h2 class="app-section-title">${escapeHtml(productsTitle || 'Popular Products')}</h2></div>
+        <a href="${base || '/'}?sort=newest">View All</a>
       </div>
       ${sortOptions || ''}
       <div class="app-grid ${productCardStyle === 'style-4' ? 'list-layout' : ''}">${productCards || '<div class="store-empty">No products yet.</div>'}</div>
       ${paginationHtml || ''}
+      <div class="view-all-wrap"><a class="view-all-btn" href="${base || '/'}?sort=newest">View All Products →</a></div>
     </section>
-    ${renderStoreFooterBlock(store, cfg)}`;
+    ${renderAppSupportSections(store, cfg)}
+    ${renderAppThemeFooter(store, base, cfg)}`;
   return renderAppThemeScaffold(store, slug, {
     base,
     cfg,
@@ -87,6 +90,57 @@ function renderAppStyleStore(store, slug, data) {
     content,
     floatingWhatsapp: true
   });
+}
+
+function renderAppSupportSections(store, cfg) {
+  if (cfg.showTrustSection === false) return '';
+  return `
+    <section class="trust-grid">
+      <div class="trust-card"><div class="trust-icon">🚚</div><strong>Free Shipping</strong><span>Free shipping on selected orders</span></div>
+      <div class="trust-card"><div class="trust-icon">↩️</div><strong>Easy Returns</strong><span>Simple return policy support</span></div>
+      <div class="trust-card"><div class="trust-icon">💬</div><strong>Online Support</strong><span>Fast support on chat and WhatsApp</span></div>
+      <div class="trust-card"><div class="trust-icon">🔒</div><strong>Secure Payment</strong><span>Protected checkout and trusted gateways</span></div>
+    </section>
+    <section class="insta-section">
+      <div class="insta-head"><div class="insta-icon">📷</div><div><strong>Follow Us on Instagram</strong><div style="font-size:12px;color:#64748b;">${escapeHtml(String(cfg.instagramHandle || `@${store.slug || 'store'}`))}</div></div></div>
+      <div class="insta-grid">
+        <div class="insta-ph">📸</div><div class="insta-ph">📸</div><div class="insta-ph">📸</div><div class="insta-ph">📸</div><div class="insta-ph">📸</div><div class="insta-ph">📸</div>
+      </div>
+      <a class="insta-btn" href="${store.whatsapp ? `https://wa.me/${encodeURIComponent(store.whatsapp)}` : '#'}"${store.whatsapp ? ' target="_blank" rel="noopener"' : ''}>Connect With Us</a>
+    </section>`;
+}
+
+function renderAppThemeFooter(store, base, cfg) {
+  if (cfg.showFooter === false) return '';
+  return `
+    <footer class="store-footer app-theme-footer">
+      <div class="footer-brand-row">
+        <div class="footer-logo-ph">${escapeHtml(store.name.charAt(0).toUpperCase())}</div>
+        <span class="footer-brand-name">${escapeHtml(store.name)}</span>
+      </div>
+      <p class="footer-desc">${escapeHtml(store.description || 'Premium products with smooth shopping experience.')}</p>
+      <div class="footer-cols">
+        <div class="footer-col">
+          <h4>Quick Links</h4>
+          <ul>
+            <li><a href="${base || '/'}">Home</a></li>
+            <li><a href="${base || '/'}?category=all">Shop All</a></li>
+            <li><a href="${base}/track-order">Track Order</a></li>
+            <li><a href="${base}/account">My Account</a></li>
+          </ul>
+        </div>
+        <div class="footer-col">
+          <h4>Support</h4>
+          <ul>
+            <li><a href="${store.whatsapp ? `https://wa.me/${encodeURIComponent(store.whatsapp)}` : '#'}"${store.whatsapp ? ' target="_blank" rel="noopener"' : ''}>WhatsApp</a></li>
+            <li><a href="${base}/cart">Cart</a></li>
+            <li><a href="${base}/wishlist">Wishlist</a></li>
+            <li><a href="${base}/checkout?mode=cart">Checkout</a></li>
+          </ul>
+        </div>
+      </div>
+      <div class="footer-bottom"><span>© ${new Date().getFullYear()} ${escapeHtml(store.name)}. All rights reserved.</span><span>Powered by MyShopBuilder</span></div>
+    </footer>`;
 }
 
 function renderAppProductPage(store, slug, data) {
@@ -431,17 +485,20 @@ function renderAppProductCard(product, options) {
   return `<article class="app-card product-style-${escapeHtml(cfg.productCardStyle || 'style-2')} ${compact ? 'compact' : ''}">
     <div class="app-card-figure">
       ${discount ? `<div class="app-sale-badge">-${escapeHtml(String(discount))}%</div>` : ''}
+      <form method="POST" action="${base}/wishlist/toggle/${encodeURIComponent(product.id)}"><button class="app-theme-heart ${wished ? 'wishlist-active' : ''}" type="submit">${wished ? '♥' : '♡'}</button></form>
       <a href="${base}/product/${encodeURIComponent(product.id)}">${product.image ? `<img class="app-card-img" src="${escapeHtml(product.image)}" alt="${escapeHtml(product.name)}">` : `<div class="app-card-img app-card-empty">No image</div>`}</a>
     </div>
     <div class="app-card-body">
-      <div class="product-rating">★ ${escapeHtml(String(getProductDisplayRating(product)))} rating</div>
       <h3>${escapeHtml(product.name)}</h3>
-      <div class="app-card-price"><span class="price">${escapeHtml(formatMoney(product.price))}</span>${compareAt ? `<span class="old-price">${escapeHtml(formatMoney(compareAt))}</span>` : ''}</div>
-      ${cfg.showProductStock !== false ? `<span class="stock">${stock ? `${escapeHtml(String(stock))} left` : 'Sold out'}</span>` : ''}
+      <div class="app-card-price">
+        <span class="price">${escapeHtml(formatMoney(product.price))}</span>
+        ${compareAt ? `<span class="old-price">${escapeHtml(formatMoney(compareAt))}</span>` : ''}
+        ${discount ? `<span class="app-off-pill">${escapeHtml(String(discount))}% OFF</span>` : ''}
+      </div>
+      ${cfg.showProductStock !== false ? `<div class="app-card-price"><span class="stock">● ${stock ? `${escapeHtml(String(stock))} left` : 'Sold out'}</span><span class="app-card-rating">★ ${escapeHtml(String(getProductDisplayRating(product)))}</span></div>` : ''}
     </div>
     <div class="app-card-actions">
-      <form method="POST" action="${base}/cart/add/${encodeURIComponent(product.id)}"><button class="primary-btn" type="submit">${escapeHtml((labels && labels.addProductButton) || 'Add to Cart')}</button></form>
-      <form method="POST" action="${base}/wishlist/toggle/${encodeURIComponent(product.id)}"><button class="app-mini-icon ${wished ? 'wishlist-active' : ''}" type="submit">${wished ? '♥' : '♡'}</button></form>
+      <form method="POST" action="${base}/cart/add/${encodeURIComponent(product.id)}"><button class="primary-btn app-theme-one-btn" type="submit">${escapeHtml((labels && labels.addProductButton) || '+ Add to Cart')}</button></form>
     </div>
   </article>`;
 }
