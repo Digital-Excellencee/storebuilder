@@ -1350,7 +1350,7 @@ function StorePage() {
   const products = productState.data.products || [];
   const themeConfig = store.themeConfig || {};
   const labelSettings = (store.storeSettings && store.storeSettings.labelSettings) || {};
-  const desktopBanner = (Array.isArray(themeConfig.bannerImages) && themeConfig.bannerImages[0]) || themeConfig.bannerImage || store.logo || '';
+  const desktopBanner = (Array.isArray(themeConfig.bannerImages) && themeConfig.bannerImages[0]) || themeConfig.bannerImage || '';
   const mobileBanner = (Array.isArray(themeConfig.bannerImagesMobile) && themeConfig.bannerImagesMobile[0]) || desktopBanner;
   const isThemeOne = String(store.template || 'app-style') === 'app-style';
 
