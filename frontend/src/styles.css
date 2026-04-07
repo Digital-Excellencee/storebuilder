@@ -429,6 +429,58 @@ th { font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: 
 .app-style-drawer-cats h4 { margin: 0; font-size: 13px; text-transform: uppercase; letter-spacing: .12em; color: #64748b; }
 .app-style-drawer-cats button { text-align: left; padding: 10px 0; border: 0; background: transparent; border-bottom: 1px solid #eef2f7; color: #111827; font-weight: 700; }
 .theme-app-style .app-feature-media img { object-position: center top; }
+.theme-app-style { max-width: 480px; margin: 0 auto; position: relative; box-shadow: 0 0 60px rgba(0,0,0,.15); }
+.store-wrap-hero { width: calc(100% - 16px); margin: 8px auto 0; }
+.app-style-search-row { padding: 10px 16px 12px; display: grid; grid-template-columns: 1fr 48px; gap: 10px; align-items: center; }
+.app-style-search-row .app-search-form { min-height: 48px; border-radius: 999px; background: #f1efff; border: 1px solid #ece7ff; }
+.app-style-search-row .app-search-icon { font-size: 18px; color: #9b92c4; }
+.app-style-search-row .app-search-form input { font-size: 14px; color: #374151; }
+.app-horizontal-cards { display: flex; gap: 12px; overflow-x: auto; scroll-snap-type: x mandatory; padding-bottom: 4px; scrollbar-width: none; }
+.app-horizontal-cards::-webkit-scrollbar { display: none; }
+.horizontal-card { min-width: 185px; scroll-snap-align: start; }
+.theme-app-style .app-feature-hero { border-radius: 20px; min-height: 420px; box-shadow: 0 20px 48px rgba(15,23,42,.22); }
+.theme-app-style .app-feature-media img { min-height: 420px; aspect-ratio: 0.82/1; object-fit: cover; object-position: center top; }
+.theme-app-style .app-feature-overlay { gap: 8px; padding: 28px 24px; background: linear-gradient(180deg,rgba(7,11,19,.04),rgba(7,11,19,.68)); }
+.theme-app-style .app-eyebrow { color: #c4b5fd; font-size: 10px; letter-spacing: .14em; }
+.theme-app-style .app-feature-overlay h1 { font-size: clamp(28px,8vw,44px); max-width: 12ch; }
+.theme-app-style .app-feature-overlay p { font-size: 14px; max-width: 30ch; font-weight: 600; }
+.theme-app-style .btn { min-height: 44px; padding: 10px 20px; border-radius: 999px; background: #fff; color: #111827; font-size: 13px; font-weight: 800; }
+.theme-app-style .btn.btn-outline { background: transparent; border: 2px solid rgba(255,255,255,.55); color: #fff; }
+.theme-app-style .app-section { padding: 20px 0 0; }
+.theme-app-style .app-rail-head { padding: 0 4px; margin-bottom: 14px; }
+.theme-app-style .app-section-title { font-size: 20px; }
+.theme-app-style .app-card { border-radius: 18px; box-shadow: 0 8px 24px rgba(15,23,42,.07); }
+.theme-app-style .app-card-img { aspect-ratio: 0.85/1; }
+.theme-app-style .app-card-body { padding: 10px 12px 8px; gap: 4px; }
+.theme-app-style .app-card-body h3 { font-size: 13px; min-height: 34px; }
+.theme-app-style .price { font-size: 15px; }
+.theme-app-style .old-price { font-size: 11px; }
+.theme-app-style .app-theme-one-btn { min-height: 38px; border-radius: 10px; font-size: 11px; }
+.theme-app-style .view-all-wrap { display: flex; justify-content: center; margin: 18px 0 0; }
+.theme-app-style .view-all-btn { min-height: 46px; padding: 0 28px; border-radius: 12px; background: #111827; color: #fff; font-weight: 800; }
+.theme-app-style .trust-grid { display: grid; grid-template-columns: repeat(2,1fr); gap: 10px; margin-top: 24px; padding: 16px; border-radius: 18px; background: #0d0d0d; }
+.theme-app-style .trust-card { padding: 14px; border-radius: 14px; background: #1a1a1a; color: #fff; display: flex; flex-direction: column; gap: 5px; }
+.theme-app-style .trust-card strong { font-size: 13px; color: #f9fafb; }
+.theme-app-style .trust-card span { color: #888; font-size: 11px; }
+.theme-app-style .insta-section { margin-top: 20px; padding: 18px 16px; border-radius: 18px; background: #fff; box-shadow: 0 8px 24px rgba(15,23,42,.05); }
+.theme-app-style .insta-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 4px; border-radius: 12px; overflow: hidden; }
+.theme-app-style .insta-img { width: 100%; aspect-ratio: 1; object-fit: cover; }
+.theme-app-style .insta-btn { display: flex; align-items: center; justify-content: center; margin: 14px auto 0; min-height: 44px; padding: 0 24px; border-radius: 10px; background: #111827; color: #fff; font-weight: 800; }
+.theme-app-style .store-footer { margin-top: 20px; padding: 24px 20px 100px; background: #0d0d0d; color: #fff; border-radius: 22px 22px 0 0; }
+.theme-app-style .footer-brand-row { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }
+.theme-app-style .footer-logo-ph { width: 36px; height: 36px; border-radius: 10px; background: linear-gradient(135deg,#3b1fa0,#6c47ff); display: grid; place-items: center; color: #fff; font-size: 18px; font-weight: 900; }
+.theme-app-style .footer-brand-name { font-size: 17px; font-weight: 900; color: #fff; }
+.theme-app-style .footer-desc { font-size: 12px; color: #666; margin-bottom: 18px; line-height: 1.6; }
+.theme-app-style .footer-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-bottom: 20px; }
+.theme-app-style .footer-col h4 { font-size: 12px; font-weight: 800; color: #888; text-transform: uppercase; letter-spacing: .08em; margin-bottom: 10px; }
+.theme-app-style .footer-col ul { list-style: none; display: grid; gap: 8px; }
+.theme-app-style .footer-col ul li a { font-size: 13px; color: rgba(255,255,255,.6); font-weight: 500; }
+.theme-app-style .footer-bottom { padding-top: 16px; border-top: 1px solid rgba(255,255,255,.07); display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+.theme-app-style .footer-bottom span { font-size: 11px; color: #555; }
+.theme-app-style .app-bottom-nav { display: flex; position: fixed; left: 50%; transform: translateX(-50%); width: calc(min(480px,100%) - 20px); bottom: 10px; gap: 4px; align-items: stretch; background: #fff; border: 1px solid #e5e7eb; box-shadow: 0 -8px 30px rgba(15,23,42,.12); z-index: 60; padding: 8px; border-radius: 22px; }
+.theme-app-style .app-bottom-nav a { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; padding: 8px 4px; border-radius: 14px; color: #9ca3af; font-size: 10px; font-weight: 700; }
+.theme-app-style .app-bottom-nav a.active { color: #111827; background: #f4f4f5; }
+.theme-app-style .app-nav-icon { font-size: 18px; }
 
 .theme-two-page { --store-primary: #111827; background: #f8f8f8; color: #1a1a1a; }
 .theme-two-wrap { padding-top: 18px; padding-bottom: 96px; }
