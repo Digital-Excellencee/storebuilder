@@ -424,7 +424,7 @@ th { font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: 
 .app-style-drawer-head strong { font-size: 20px; letter-spacing: -.02em; }
 .app-style-drawer-head button { width: 36px; height: 36px; border-radius: 50%; border: 1px solid #dbe3ef; background: #fff; font-size: 22px; }
 .app-style-drawer-links { display: grid; gap: 6px; }
-.app-style-drawer-links a { padding: 12px 14px; border-radius: 14px; color: #0f172a; background: #f8fafc; font-weight: 700; }
+.app-style-drawer-links a { padding: 12px 14px; border-radius: 14px; color: #0f172a; background: #f8fafc; font-weight: 700; display: flex; align-items: center; gap: 10px; }
 .app-style-drawer-cats { display: grid; gap: 10px; }
 .app-style-drawer-cats h4 { margin: 0; font-size: 13px; text-transform: uppercase; letter-spacing: .12em; color: #64748b; }
 .app-style-drawer-cats button { text-align: left; padding: 10px 0; border: 0; background: transparent; border-bottom: 1px solid #eef2f7; color: #111827; font-weight: 700; }
@@ -485,9 +485,10 @@ th { font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: 
 .theme-app-style .footer-bottom { padding-top: 16px; border-top: 1px solid rgba(255,255,255,.07); display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
 .theme-app-style .footer-bottom span { font-size: 11px; color: #555; }
 .theme-app-style .app-bottom-nav { display: flex; position: fixed; left: 50%; transform: translateX(-50%); width: calc(min(480px,100%) - 20px); bottom: 10px; gap: 4px; align-items: stretch; background: #fff; border: 1px solid #e5e7eb; box-shadow: 0 -8px 30px rgba(15,23,42,.12); z-index: 60; padding: 8px; border-radius: 22px; }
-.theme-app-style .app-bottom-nav a { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; padding: 8px 4px; border-radius: 14px; color: #9ca3af; font-size: 10px; font-weight: 700; }
+.theme-app-style .app-bottom-nav a { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; padding: 8px 3px; border-radius: 14px; color: #9ca3af; font-size: 10px; font-weight: 700; text-align: center; }
 .theme-app-style .app-bottom-nav a.active { color: #111827; background: #f4f4f5; }
-.theme-app-style .app-nav-icon { font-size: 18px; }
+.theme-app-style .app-nav-icon { font-size: 18px; line-height: 1; display: flex; align-items: center; justify-content: center; }
+.theme-app-style .app-nav-icon svg { width: 18px; height: 18px; display: block; }
 
 .theme-two-page { --store-primary: #111827; background: #f8f8f8; color: #1a1a1a; }
 .theme-two-wrap { padding-top: 18px; padding-bottom: 96px; }
