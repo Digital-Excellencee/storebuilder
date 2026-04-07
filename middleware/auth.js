@@ -3,6 +3,23 @@ const { setFlash } = require('../helpers/flash');
 
 async function requireAuth(req, res, next) {
   try {
+    if (req.session.fromSuperAdmin) {
+      const db = await loadDB();
+      const user = db.users[req.session.userId];
+      if (!user || !user.storeSlug || !db.stores[user.storeSlug]) {
+        req.session.userId = null;
+        req.session.fromSuperAdmin = null;
+        setFlash(req, 'error', 'Your account session is no longer valid.');
+        res.redirect('/login');
+        return;
+      }
+      req.db = db;
+      req.currentUser = user;
+      req.currentStore = db.stores[user.storeSlug];
+      req.fromSuperAdmin = true;
+      next();
+      return;
+    }
     if (!req.session.userId) {
       setFlash(req, 'error', 'Please log in to continue.');
       res.redirect('/login');

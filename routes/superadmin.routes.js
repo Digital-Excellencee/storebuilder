@@ -78,7 +78,7 @@ router.post('/superadmin/migrate-subdomains', requireSuperAdmin, route(async (re
 router.get('/superadmin/stores', requireSuperAdmin, route(async (req, res) => {
   const db = req.db;
   const stores = [...Object.values(db.stores)].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-  const html = stores.length ? `<div class="table-wrap"><table><thead><tr><th>Store</th><th>Slug</th><th>Owner</th><th>Products</th><th>Orders</th><th>Visits</th><th>Created</th><th>Actions</th></tr></thead><tbody>${stores.map((store) => { const owner = getStoreOwner(db, store); return `<tr><td>${escapeHtml(store.name)}</td><td>${escapeHtml(store.slug)}</td><td>${escapeHtml(owner ? owner.email : '-')}</td><td>${escapeHtml(String(store.products.length))}</td><td>${escapeHtml(String(store.orders.length))}</td><td>${escapeHtml(String(store.visits))}</td><td>${escapeHtml(formatDate(store.createdAt))}</td><td><div class="actions"><a class="btn btn-secondary" href="/store/${encodeURIComponent(store.slug)}" target="_blank" rel="noopener noreferrer">View</a><a class="btn btn-secondary" href="/superadmin/store/${encodeURIComponent(store.slug)}">Manage</a><form method="POST" action="/superadmin/store/${encodeURIComponent(store.slug)}/delete" onsubmit="return confirm('Delete this store and owner account?');"><button class="btn btn-danger" type="submit">Delete</button></form></div></td></tr>`; }).join('')}</tbody></table></div>` : '<div class="empty">No stores found.</div>';
+  const html = stores.length ? `<div class="table-wrap"><table><thead><tr><th>Store</th><th>Slug</th><th>Owner</th><th>Products</th><th>Orders</th><th>Revenue</th><th>Created</th><th>Actions</th></tr></thead><tbody>${stores.map((store) => { const owner = getStoreOwner(db, store); const revenue = (store.orders || []).reduce((sum, o) => sum + (Number(o.amount) || 0), 0); return `<tr><td><a href="/superadmin/store/${encodeURIComponent(store.slug)}">${escapeHtml(store.name)}</a></td><td>${escapeHtml(store.slug)}</td><td>${escapeHtml(owner ? owner.email : '-')}</td><td>${escapeHtml(String(store.products.length))}</td><td>${escapeHtml(String(store.orders.length))}</td><td>${escapeHtml(formatMoney(revenue))}</td><td>${escapeHtml(formatDate(store.createdAt))}</td><td><div class="actions"><a class="btn btn-secondary" href="/store/${encodeURIComponent(store.slug)}" target="_blank" rel="noopener noreferrer">View</a><a class="btn btn-secondary" href="/superadmin/store/${encodeURIComponent(store.slug)}">Manage</a>${owner ? `<a class="btn" href="/superadmin/login-as-vendor/${encodeURIComponent(owner.id)}">Login</a>` : ''}<form method="POST" action="/superadmin/store/${encodeURIComponent(store.slug)}/delete" onsubmit="return confirm('Delete this store and owner account?');"><button class="btn btn-danger" type="submit">Delete</button></form></div></td></tr>`; }).join('')}</tbody></table></div>` : '<div class="empty">No stores found.</div>';
   res.send(renderSuperAdminLayout(req, 'Stores', 'stores', `<section class="card panel"><h1 class="section-title">All stores</h1><p class="section-subtitle">Review every tenant store on the platform.</p>${html}</section>`));
 }));
 
@@ -87,15 +87,35 @@ router.get('/superadmin/store/:slug', requireSuperAdmin, route(async (req, res) 
   const store = db.stores[req.params.slug];
   if (!store) { setFlash(req, 'error', 'Store not found.'); res.redirect('/superadmin/stores'); return; }
   const owner = getStoreOwner(db, store);
-  const productsHtml = store.products.length ? `<div class="table-wrap"><table><thead><tr><th>Image</th><th>Name</th><th>Price</th><th>Stock</th><th>Delete</th></tr></thead><tbody>${store.products.map((product) => `<tr><td>${product.image ? `<img class="product-thumb" src="${escapeHtml(product.image)}" alt="${escapeHtml(product.name)}">` : '-'}</td><td>${escapeHtml(product.name)}</td><td>${escapeHtml(formatMoney(product.price))}</td><td>${escapeHtml(product.stock)}</td><td><form method="POST" action="/superadmin/products/${encodeURIComponent(store.slug)}/delete/${encodeURIComponent(product.id)}" onsubmit="return confirm('Delete this product?');"><button class="btn btn-danger" type="submit">Delete</button></form></td></tr>`).join('')}</tbody></table></div>` : '<div class="empty">No products found.</div>';
+  const productsHtml = store.products.length ? `<div class="table-wrap"><table><thead><tr><th>Image</th><th>Name</th><th>Price</th><th>Stock</th><th>Active</th><th>Delete</th></tr></thead><tbody>${store.products.map((product) => `<tr><td>${product.image ? `<img class="product-thumb" src="${escapeHtml(product.image)}" alt="${escapeHtml(product.name)}" style="width:50px;height:50px;object-fit:cover;border-radius:8px;">` : '-'}</td><td>${escapeHtml(product.name)}</td><td>${escapeHtml(formatMoney(product.price))}</td><td>${escapeHtml(product.stock)}</td><td>${product.active !== false ? '<span class="badge badge-success">Active</span>' : '<span class="badge badge-secondary">Inactive</span>'}</td><td><form method="POST" action="/superadmin/products/${encodeURIComponent(store.slug)}/delete/${encodeURIComponent(product.id)}" onsubmit="return confirm('Delete this product?');"><button class="btn btn-danger" type="submit">Delete</button></form></td></tr>`).join('')}</tbody></table></div>` : '<div class="empty">No products found.</div>';
   const ordersHtml = store.orders.length ? `<div class="table-wrap"><table><thead><tr><th>Order</th><th>Product</th><th>Customer</th><th>Status</th><th>Amount</th><th>Date</th></tr></thead><tbody>${store.orders.map((order) => `<tr><td>${escapeHtml(order.id)}</td><td>${escapeHtml(order.productName)}</td><td>${escapeHtml(order.customerName || 'WhatsApp lead')}</td><td>${getStatusBadge(order.status)}</td><td>${escapeHtml(formatMoney(order.amount))}</td><td>${escapeHtml(formatDate(order.createdAt))}</td></tr>`).join('')}</tbody></table></div>` : '<div class="empty">No orders found.</div>';
+  const revenue = (store.orders || []).reduce((sum, o) => sum + (Number(o.amount) || 0), 0);
   res.send(renderSuperAdminLayout(req, `Manage ${store.name}`, 'stores', `
       <section class="grid-2">
-        <div class="card panel"><h1 class="section-title">${escapeHtml(store.name)}</h1><div class="kpi-list"><div class="kpi-item"><strong>Slug</strong><span>${escapeHtml(store.slug)}</span></div><div class="kpi-item"><strong>Owner</strong><span>${escapeHtml(owner ? owner.email : '-')}</span></div><div class="kpi-item"><strong>WhatsApp</strong><span>${escapeHtml(store.whatsapp || '-')}</span></div><div class="kpi-item"><strong>Visits</strong><span>${escapeHtml(String(store.visits))}</span></div><div class="kpi-item"><strong>Created</strong><span>${escapeHtml(formatDate(store.createdAt))}</span></div></div><div style="height:16px;"></div><form method="POST" action="/superadmin/store/${encodeURIComponent(store.slug)}/delete" onsubmit="return confirm('Delete this store and owner account?');"><button class="btn btn-danger" type="submit">Delete Store</button></form></div>
-        <div class="card panel"><h2 class="section-title" style="font-size:24px;">Store logo</h2>${store.logo ? `<img class="logo-preview" src="${escapeHtml(store.logo)}" alt="${escapeHtml(store.name)}">` : '<div class="empty">No logo uploaded</div>'}<div style="height:16px;"></div><p class="muted">${escapeHtml(store.description)}</p></div>
+        <div class="card panel">
+          <h1 class="section-title">${escapeHtml(store.name)}</h1>
+          <div class="kpi-list">
+            <div class="kpi-item"><strong>Slug</strong><span>${escapeHtml(store.slug)}</span></div>
+            <div class="kpi-item"><strong>Owner</strong><span>${escapeHtml(owner ? owner.email : '-')}</span></div>
+            <div class="kpi-item"><strong>WhatsApp</strong><span>${escapeHtml(store.whatsapp || '-')}</span></div>
+            <div class="kpi-item"><strong>Visits</strong><span>${escapeHtml(String(store.visits))}</span></div>
+            <div class="kpi-item"><strong>Products</strong><span>${store.products.length}</span></div>
+            <div class="kpi-item"><strong>Orders</strong><span>${store.orders.length}</span></div>
+            <div class="kpi-item"><strong>Revenue</strong><span>${formatMoney(revenue)}</span></div>
+            <div class="kpi-item"><strong>Created</strong><span>${escapeHtml(formatDate(store.createdAt))}</span></div>
+          </div>
+          <div style="height:16px;"></div>
+          ${owner ? `<a class="btn" href="/superadmin/login-as-vendor/${encodeURIComponent(owner.id)}" style="margin-bottom:8px;display:inline-block;">🚀 Login as Vendor</a><br>` : ''}
+          <form method="POST" action="/superadmin/store/${encodeURIComponent(store.slug)}/delete" onsubmit="return confirm('Delete this store and owner account?');"><button class="btn btn-danger" type="submit">Delete Store</button></form>
+        </div>
+        <div class="card panel">
+          <h2 class="section-title" style="font-size:24px;">Store logo</h2>${store.logo ? `<img class="logo-preview" src="${escapeHtml(store.logo)}" alt="${escapeHtml(store.name)}">` : '<div class="empty">No logo uploaded</div>'}<div style="height:16px;"></div><p class="muted">${escapeHtml(store.description)}</p>
+          <div style="height:12px;"></div>
+          <a class="btn btn-secondary" href="/store/${encodeURIComponent(store.slug)}" target="_blank" rel="noopener noreferrer">View Storefront</a>
+        </div>
       </section>
-      <section class="card panel"><h2 class="section-title" style="font-size:24px;">Products</h2>${productsHtml}</section>
-      <section class="card panel"><h2 class="section-title" style="font-size:24px;">Orders</h2>${ordersHtml}</section>
+      <section class="card panel"><h2 class="section-title" style="font-size:24px;">Products (${store.products.length})</h2>${productsHtml}</section>
+      <section class="card panel"><h2 class="section-title" style="font-size:24px;">Orders (${store.orders.length})</h2>${ordersHtml}</section>
     `));
 }));
 
@@ -122,7 +142,7 @@ router.post('/superadmin/store/:slug/delete', requireSuperAdmin, route(async (re
 router.get('/superadmin/users', requireSuperAdmin, route(async (req, res) => {
   const db = req.db;
   const users = [...Object.values(db.users)].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-  const html = users.length ? `<div class="table-wrap"><table><thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Store Name</th><th>Store Slug</th><th>Products</th><th>Orders</th><th>Joined</th><th>Delete</th></tr></thead><tbody>${users.map((user) => { const store = db.stores[user.storeSlug]; return `<tr><td>${escapeHtml(user.name)}</td><td>${escapeHtml(user.email)}</td><td>${escapeHtml(user.phone || '-')}</td><td>${escapeHtml(store ? store.name : '-')}</td><td>${escapeHtml(store ? store.slug : '-')}</td><td>${escapeHtml(String(store ? store.products.length : 0))}</td><td>${escapeHtml(String(store ? store.orders.length : 0))}</td><td>${escapeHtml(formatDate(user.createdAt))}</td><td><form method="POST" action="/superadmin/user/${encodeURIComponent(user.id)}/delete" onsubmit="return confirm('Delete this user and store?');"><button class="btn btn-danger" type="submit">Delete</button></form></td></tr>`; }).join('')}</tbody></table></div>` : '<div class="empty">No users found.</div>';
+  const html = users.length ? `<div class="table-wrap"><table><thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Store</th><th>Products</th><th>Orders</th><th>Revenue</th><th>Joined</th><th>Actions</th></tr></thead><tbody>${users.map((user) => { const store = db.stores[user.storeSlug]; const revenue = (store ? store.orders : []).reduce((sum, o) => sum + (Number(o.amount) || 0), 0); return `<tr><td>${escapeHtml(user.name)}</td><td>${escapeHtml(user.email)}</td><td>${escapeHtml(user.phone || '-')}</td><td><a href="/superadmin/vendor/${encodeURIComponent(user.id)}">${escapeHtml(store ? store.name : '-')}</a></td><td>${escapeHtml(String(store ? store.products.length : 0))}</td><td>${escapeHtml(String(store ? store.orders.length : 0))}</td><td>${escapeHtml(formatMoney(revenue))}</td><td>${escapeHtml(formatDate(user.createdAt))}</td><td><div class="actions"><a class="btn btn-secondary" href="/superadmin/vendor/${encodeURIComponent(user.id)}/orders">Orders</a><a class="btn btn-secondary" href="/superadmin/vendor/${encodeURIComponent(user.id)}/products">Products</a><a class="btn" href="/superadmin/login-as-vendor/${encodeURIComponent(user.id)}">Login</a><form method="POST" action="/superadmin/user/${encodeURIComponent(user.id)}/delete" onsubmit="return confirm('Delete this user and store?');"><button class="btn btn-danger" type="submit">Delete</button></form></div></td></tr>`; }).join('')}</tbody></table></div>` : '<div class="empty">No users found.</div>';
   res.send(renderSuperAdminLayout(req, 'Users', 'users', `<section class="card panel"><h1 class="section-title">All users</h1><p class="section-subtitle">Manage registered store owners across the platform.</p>${html}</section>`));
 }));
 
@@ -184,5 +204,230 @@ router.get('/superadmin/logout', route(async (req, res) => {
   }
 }));
 
+router.get('/superadmin/login-as-vendor/:userId', requireSuperAdmin, route(async (req, res) => {
+  const db = req.db;
+  const user = db.users[req.params.userId];
+  if (!user || !user.storeSlug) {
+    setFlash(req, 'error', 'User not found.');
+    res.redirect('/superadmin/users');
+    return;
+  }
+  req.session.userId = user.id;
+  req.session.storeSlug = user.storeSlug;
+  req.session.fromSuperAdmin = true;
+  req.session.superAdminId = null;
+  res.redirect('/dashboard');
+}));
+
+router.get('/superadmin/return-from-vendor', requireSuperAdmin, route(async (req, res) => {
+  setFlash(req, 'success', 'Returned to Super Admin panel.');
+  res.redirect('/superadmin/dashboard');
+}));
+
+router.get('/superadmin/vendor/:userId/orders', requireSuperAdmin, route(async (req, res) => {
+  const db = req.db;
+  const user = db.users[req.params.userId];
+  if (!user || !user.storeSlug) {
+    setFlash(req, 'error', 'User not found.');
+    res.redirect('/superadmin/users');
+    return;
+  }
+  const store = db.stores[user.storeSlug];
+  if (!store) {
+    setFlash(req, 'error', 'Store not found.');
+    res.redirect('/superadmin/users');
+    return;
+  }
+  const orders = store.orders || [];
+  const ordersHtml = orders.length ? `<div class="table-wrap"><table><thead><tr><th>Order ID</th><th>Customer</th><th>Product</th><th>Amount</th><th>Status</th><th>Date</th></tr></thead><tbody>${orders.map((order) => `<tr><td>${escapeHtml(order.id || '-')}</td><td>${escapeHtml(order.customerName || 'N/A')}</td><td>${escapeHtml(order.productName || 'N/A')}</td><td>${escapeHtml(formatMoney(order.amount))}</td><td>${getStatusBadge(order.status)}</td><td>${escapeHtml(formatDate(order.createdAt))}</td></tr>`).join('')}</tbody></table></div>` : '<div class="empty">No orders found.</div>';
+  const flash = renderFlashMessages(req);
+  res.send(renderSuperAdminLayout(req, `Orders - ${store.name}`, 'vendors', `
+      ${flash}
+      <section class="card panel">
+        <div class="page-header">
+          <div>
+            <h1 class="section-title">Orders: ${escapeHtml(store.name)}</h1>
+            <p class="section-subtitle">Total ${orders.length} orders</p>
+          </div>
+          <div class="action-bar">
+            <a class="btn btn-secondary" href="/superadmin/vendor/${encodeURIComponent(user.id)}">← Back to Store</a>
+            <a class="btn" href="/superadmin/login-as-vendor/${encodeURIComponent(user.id)}">Login as Vendor</a>
+          </div>
+        </div>
+        ${ordersHtml}
+      </section>
+    `));
+}));
+
+router.get('/superadmin/vendor/:userId/products', requireSuperAdmin, route(async (req, res) => {
+  const db = req.db;
+  const user = db.users[req.params.userId];
+  if (!user || !user.storeSlug) {
+    setFlash(req, 'error', 'User not found.');
+    res.redirect('/superadmin/users');
+    return;
+  }
+  const store = db.stores[user.storeSlug];
+  if (!store) {
+    setFlash(req, 'error', 'Store not found.');
+    res.redirect('/superadmin/users');
+    return;
+  }
+  const products = store.products || [];
+  const productsHtml = products.length ? `<div class="table-wrap"><table><thead><tr><th>Image</th><th>Name</th><th>Price</th><th>Compare Price</th><th>Stock</th><th>Active</th></tr></thead><tbody>${products.map((product) => `<tr><td>${product.image ? `<img class="product-thumb" src="${escapeHtml(product.image)}" alt="${escapeHtml(product.name)}" style="width:50px;height:50px;object-fit:cover;border-radius:8px;">` : '-'}</td><td>${escapeHtml(product.name || '-')}</td><td>${escapeHtml(formatMoney(product.price))}</td><td>${product.comparePrice ? escapeHtml(formatMoney(product.comparePrice)) : '-'}</td><td>${escapeHtml(String(product.stock || 0))}</td><td>${product.active !== false ? '<span class="badge badge-success">Active</span>' : '<span class="badge badge-secondary">Inactive</span>'}</td></tr>`).join('')}</tbody></table></div>` : '<div class="empty">No products found.</div>';
+  const flash = renderFlashMessages(req);
+  res.send(renderSuperAdminLayout(req, `Products - ${store.name}`, 'vendors', `
+      ${flash}
+      <section class="card panel">
+        <div class="page-header">
+          <div>
+            <h1 class="section-title">Products: ${escapeHtml(store.name)}</h1>
+            <p class="section-subtitle">Total ${products.length} products</p>
+          </div>
+          <div class="action-bar">
+            <a class="btn btn-secondary" href="/superadmin/vendor/${encodeURIComponent(user.id)}">← Back to Store</a>
+            <a class="btn" href="/superadmin/login-as-vendor/${encodeURIComponent(user.id)}">Login as Vendor</a>
+          </div>
+        </div>
+        ${productsHtml}
+      </section>
+    `));
+}));
+
+router.get('/superadmin/vendor/:userId/customers', requireSuperAdmin, route(async (req, res) => {
+  const db = req.db;
+  const user = db.users[req.params.userId];
+  if (!user || !user.storeSlug) {
+    setFlash(req, 'error', 'User not found.');
+    res.redirect('/superadmin/users');
+    return;
+  }
+  const store = db.stores[user.storeSlug];
+  if (!store) {
+    setFlash(req, 'error', 'Store not found.');
+    res.redirect('/superadmin/users');
+    return;
+  }
+  const customers = Object.values(db.customers || {}).filter((c) => c.storeSlug === user.storeSlug);
+  const customersHtml = customers.length ? `<div class="table-wrap"><table><thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Orders</th><th>Joined</th></tr></thead><tbody>${customers.map((customer) => `<tr><td>${escapeHtml(customer.name || '-')}</td><td>${escapeHtml(customer.email || '-')}</td><td>${escapeHtml(customer.phone || '-')}</td><td>${escapeHtml(String((customer.orderIds || []).length))}</td><td>${escapeHtml(formatDate(customer.createdAt))}</td></tr>`).join('')}</tbody></table></div>` : '<div class="empty">No customers found.</div>';
+  const flash = renderFlashMessages(req);
+  res.send(renderSuperAdminLayout(req, `Customers - ${store.name}`, 'vendors', `
+      ${flash}
+      <section class="card panel">
+        <div class="page-header">
+          <div>
+            <h1 class="section-title">Customers: ${escapeHtml(store.name)}</h1>
+            <p class="section-subtitle">Total ${customers.length} customers</p>
+          </div>
+          <div class="action-bar">
+            <a class="btn btn-secondary" href="/superadmin/vendor/${encodeURIComponent(user.id)}">← Back to Store</a>
+            <a class="btn" href="/superadmin/login-as-vendor/${encodeURIComponent(user.id)}">Login as Vendor</a>
+          </div>
+        </div>
+        ${customersHtml}
+      </section>
+    `));
+}));
+
+router.get('/superadmin/vendor/:userId', requireSuperAdmin, route(async (req, res) => {
+  const db = req.db;
+  const user = db.users[req.params.userId];
+  if (!user || !user.storeSlug) {
+    setFlash(req, 'error', 'User not found.');
+    res.redirect('/superadmin/users');
+    return;
+  }
+  const store = db.stores[user.storeSlug];
+  if (!store) {
+    setFlash(req, 'error', 'Store not found.');
+    res.redirect('/superadmin/users');
+    return;
+  }
+  const flash = renderFlashMessages(req);
+  const pendingOrders = (store.orders || []).filter((o) => o.status === 'pending').length;
+  const totalRevenue = (store.orders || []).reduce((sum, o) => sum + (Number(o.amount) || 0), 0);
+  res.send(renderSuperAdminLayout(req, `Manage: ${store.name}`, 'vendors', `
+      ${flash}
+      <section class="grid-2">
+        <div class="card panel">
+          <h1 class="section-title">${escapeHtml(store.name)}</h1>
+          <div class="kpi-list">
+            <div class="kpi-item"><strong>Owner</strong><span>${escapeHtml(user.name || '-')}</span></div>
+            <div class="kpi-item"><strong>Email</strong><span>${escapeHtml(user.email || '-')}</span></div>
+            <div class="kpi-item"><strong>Phone</strong><span>${escapeHtml(user.phone || '-')}</span></div>
+            <div class="kpi-item"><strong>Store Slug</strong><span>${escapeHtml(store.slug)}</span></div>
+            <div class="kpi-item"><strong>Created</strong><span>${escapeHtml(formatDate(store.createdAt))}</span></div>
+          </div>
+        </div>
+        <div class="card panel">
+          <h2 class="section-title" style="font-size:24px;">Quick Stats</h2>
+          <div class="kpi-list">
+            <div class="kpi-item"><strong>Products</strong><span>${store.products.length}</span></div>
+            <div class="kpi-item"><strong>Orders</strong><span>${store.orders.length}</span></div>
+            <div class="kpi-item"><strong>Pending Orders</strong><span>${pendingOrders}</span></div>
+            <div class="kpi-item"><strong>Revenue</strong><span>${formatMoney(totalRevenue)}</span></div>
+          </div>
+        </div>
+      </section>
+      <section class="card panel">
+        <h2 class="section-title" style="font-size:24px;">A-Z Management</h2>
+        <div class="option-grid" style="margin-top:16px;">
+          <a class="option-card" href="/superadmin/vendor/${encodeURIComponent(user.id)}/orders">
+            <div style="font-size:28px;">📦</div>
+            <div class="option-card-title">Orders</div>
+            <div class="option-card-sub">${store.orders.length} orders</div>
+          </a>
+          <a class="option-card" href="/superadmin/vendor/${encodeURIComponent(user.id)}/products">
+            <div style="font-size:28px;">🏷️</div>
+            <div class="option-card-title">Products</div>
+            <div class="option-card-sub">${store.products.length} products</div>
+          </a>
+          <a class="option-card" href="/superadmin/vendor/${encodeURIComponent(user.id)}/customers">
+            <div style="font-size:28px;">👥</div>
+            <div class="option-card-title">Customers</div>
+            <div class="option-card-sub">View all customers</div>
+          </a>
+          <a class="option-card" href="/dashboard/settings?section=store-details&asVendorId=${encodeURIComponent(user.id)}" target="_blank">
+            <div style="font-size:28px;">⚙️</div>
+            <div class="option-card-title">Settings</div>
+            <div class="option-card-sub">Store configuration</div>
+          </a>
+          <a class="option-card" href="/dashboard/theme?asVendorId=${encodeURIComponent(user.id)}" target="_blank">
+            <div style="font-size:28px;">🎨</div>
+            <div class="option-card-title">Theme</div>
+            <div class="option-card-sub">Customize appearance</div>
+          </a>
+          <a class="option-card" href="/store/${encodeURIComponent(store.slug)}" target="_blank">
+            <div style="font-size:28px;">🛒</div>
+            <div class="option-card-title">View Store</div>
+            <div class="option-card-sub">Open storefront</div>
+          </a>
+        </div>
+      </section>
+      <section class="card panel">
+        <h2 class="section-title" style="font-size:24px;">Actions</h2>
+        <div class="action-bar" style="margin-top:16px;">
+          <a class="btn" href="/superadmin/login-as-vendor/${encodeURIComponent(user.id)}">🚀 Login as Vendor</a>
+          <a class="btn btn-secondary" href="/superadmin/stores">← Back to Stores</a>
+          <a class="btn btn-secondary" href="/superadmin/users">← Back to Users</a>
+        </div>
+      </section>
+    `));
+}));
+
+router.get('/superadmin/vendors', requireSuperAdmin, route(async (req, res) => {
+  const db = req.db;
+  const users = Object.values(db.users).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  const html = users.length ? `<div class="table-wrap"><table><thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Store</th><th>Products</th><th>Orders</th><th>Revenue</th><th>Actions</th></tr></thead><tbody>${users.map((user) => { const store = db.stores[user.storeSlug]; const orders = store ? store.orders : []; const revenue = orders.reduce((sum, o) => sum + (Number(o.amount) || 0), 0); return `<tr><td>${escapeHtml(user.name || '-')}</td><td>${escapeHtml(user.email || '-')}</td><td>${escapeHtml(user.phone || '-')}</td><td><a href="/superadmin/vendor/${encodeURIComponent(user.id)}">${escapeHtml(store ? store.name : '-')}</a></td><td>${escapeHtml(String(store ? store.products.length : 0))}</td><td>${escapeHtml(String(orders.length))}</td><td>${escapeHtml(formatMoney(revenue))}</td><td><div class="actions"><a class="btn btn-secondary" href="/superadmin/vendor/${encodeURIComponent(user.id)}/orders">Orders</a><a class="btn btn-secondary" href="/superadmin/vendor/${encodeURIComponent(user.id)}/products">Products</a><a class="btn btn-secondary" href="/superadmin/vendor/${encodeURIComponent(user.id)}">Manage</a><a class="btn" href="/superadmin/login-as-vendor/${encodeURIComponent(user.id)}">Login</a></div></td></tr>`; }).join('')}</tbody></table></div>` : '<div class="empty">No vendors found.</div>';
+  const flash = renderFlashMessages(req);
+  res.send(renderSuperAdminLayout(req, 'Vendors', 'vendors', `
+      ${flash}
+      <section class="card panel">
+        <h1 class="section-title">All Vendors</h1>
+        <p class="section-subtitle">Manage all vendor stores, login as vendor, view orders, products and more.</p>
+        ${html}
+      </section>
+    `));
+}));
 
 module.exports = router;

@@ -77,6 +77,10 @@ const adminStyles = `
   .flash { animation:fadeUp .28s ease both; }
   .card, .stat-card, .mini-card, .metric-card, .data-chip, .template-card { animation:fadeUp .32s ease both; }
   .btn:hover, .btn-secondary:hover { transform:translateY(-1px); }
+  .btn-danger { background:#dc2626; color:#fff; border-color:#dc2626; }
+  .btn-danger:hover { background:#b91c1c; transform:translateY(-1px); }
+  .badge-success { background:#dcfce7; color:#166534; padding:2px 8px; border-radius:999px; font-size:12px; font-weight:600; }
+  .badge-secondary { background:#f1f5f9; color:#475569; padding:2px 8px; border-radius:999px; font-size:12px; font-weight:600; }
   .btn:active, .btn-secondary:active, .nav-link:active { transform:translateY(0); }
   @keyframes fadeUp { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:translateY(0); } }
   @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation:none !important; transition:none !important; scroll-behavior:auto !important; } }
@@ -127,6 +131,7 @@ function renderAdminLayout(req, title, activeKey, content, extraStylesOverride) 
   const flash = renderFlashMessages(req);
   const pageExtraStyles = extraStylesOverride || '';
   const pendingOrderCount = store && store.orders ? store.orders.filter((o) => o.status === 'pending').length : 0;
+  const isSuperAdminImpersonating = req.fromSuperAdmin === true;
   const items = [
     { section: 'Overview', key: 'dashboard', label: 'Dashboard', href: '/dashboard', icon: '▦' },
     { section: 'Overview', key: 'analytics', label: 'Analytics', href: '/dashboard/analytics', icon: '⌁' },
@@ -182,7 +187,7 @@ function renderAdminLayout(req, title, activeKey, content, extraStylesOverride) 
     </div>
   </div>
   <div class="topbar-actions">
-    <span class="topbar-pill"><span class="topbar-dot"></span> Live store</span>
+    ${isSuperAdminImpersonating ? '<a class="btn btn-danger" href="/superadmin/return-from-vendor" style="background:#dc2626;color:#fff;border-color:#dc2626;">← Return to Super Admin</a>' : '<span class="topbar-pill"><span class="topbar-dot"></span> Live store</span>'}
     <a class="btn btn-secondary" href="/dashboard/analytics">Purge Cache</a>
     <a class="btn btn-secondary" href="/store/${escapeHtml(store.slug)}" target="_blank" rel="noopener noreferrer">View store</a>
   </div>
@@ -497,6 +502,7 @@ function renderSuperAdminLayout(req, title, activeKey, content) {
   const flash = renderFlashMessages(req);
   const items = [
     { key: 'dashboard', label: 'Dashboard', href: '/superadmin/dashboard', icon: '▦' },
+    { key: 'vendors', label: 'Vendors', href: '/superadmin/vendors', icon: '◉' },
     { key: 'stores', label: 'Stores', href: '/superadmin/stores', icon: '◫' },
     { key: 'users', label: 'Users', href: '/superadmin/users', icon: '◔' },
     { key: 'logout', label: 'Logout', href: '/superadmin/logout', icon: '⎋' }
@@ -518,6 +524,7 @@ function renderSuperAdminLayout(req, title, activeKey, content) {
 <main class="main admin-shell">${flash}<div class="content-wrap">${content}</div></main>
 <nav class="mobile-nav">
   <a href="/superadmin/dashboard"${activeKey === 'dashboard' ? ' class="active"' : ''}><svg class="nav-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg><span>Home</span></a>
+  <a href="/superadmin/vendors"${activeKey === 'vendors' ? ' class="active"' : ''}><svg class="nav-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg><span>Vendors</span></a>
   <a href="/superadmin/stores"${activeKey === 'stores' ? ' class="active"' : ''}><svg class="nav-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg><span>Stores</span></a>
   <a href="/superadmin/users"${activeKey === 'users' ? ' class="active"' : ''}><svg class="nav-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg><span>Users</span></a>
   <a href="/superadmin/logout"><svg class="nav-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg><span>Logout</span></a>
