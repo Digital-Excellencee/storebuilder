@@ -1201,15 +1201,19 @@ function DashboardThemePreviewRoute() {
   return <LoadingBlock label="Opening theme preview..." />;
 }
 
-function StoreHeader({ store, slug, cartCount, wishlistCount, isThemeOne, onMenuToggle }) {
+function StoreHeader({ store, slug, cartCount, wishlistCount, isThemeOne, onMenuToggle, themeConfig }) {
   const { customer } = useAuth();
   if (isThemeOne) {
+    const marqueeItems = String(themeConfig.topBarText || 'Secure Payments | Cash On Delivery | Premium Quality')
+      .split('|')
+      .map((item) => item.trim())
+      .filter(Boolean);
     return (
       <header className="app-header app-style-header">
         <div className="app-style-top-strip">
-          <span>Secure Payments</span>
-          <span>Cash On Delivery</span>
-          <span>Premium Quality</span>
+          <div className={cn('app-style-top-track', themeConfig.topBarMarquee !== false && 'marquee')}>
+            {marqueeItems.concat(marqueeItems).map((item, index) => <span key={`${item}-${index}`}>{item}</span>)}
+          </div>
         </div>
         <div className="app-style-brand-row">
           <button className="app-style-menu-btn" type="button" aria-label="Menu" onClick={onMenuToggle}><span /><span /><span /></button>
@@ -1232,12 +1236,14 @@ function StoreHeader({ store, slug, cartCount, wishlistCount, isThemeOne, onMenu
 
 function ProductCard({ slug, product, wished, onToggleWishlist, onAddToCart, isThemeOne }) {
   const compareAt = Number(product.comparePrice || product.mrp || 0) > Number(product.price || 0) ? Number(product.comparePrice || product.mrp || 0) : 0;
+  const offPercent = compareAt ? Math.max(1, Math.round(((compareAt - Number(product.price || 0)) / compareAt) * 100)) : 0;
+  const rating = Number(product.rating || (Array.isArray(product.reviews) && product.reviews.length ? (product.reviews.reduce((sum, item) => sum + Number(item.rating || 5), 0) / product.reviews.length) : 4.7));
   if (isThemeOne) {
     return (
       <div className="app-card app-style-product-card">
-        <Link className="app-card-figure" to={`/store/${slug}/product/${product.id}`}>{compareAt ? <span className="app-sale-badge">Sale</span> : null}{product.image ? <img className="app-card-img" src={product.image} alt={product.name} /> : <div className="app-card-img app-card-empty">No image</div>}</Link>
-        <div className="app-card-body"><h3>{product.name}</h3><div className="app-card-price"><span className="price">{formatMoney(product.price)}</span>{compareAt ? <span className="old-price">{formatMoney(compareAt)}</span> : null}</div>{product.category ? <span className="stock">{product.category}</span> : null}</div>
-        <div className="app-card-actions"><button className="primary-btn" type="button" onClick={() => onAddToCart(product)}>View Product</button><button className={cn('app-mini-icon', wished && 'wishlist-active')} type="button" onClick={() => onToggleWishlist(product.id)}>{wished ? '♥' : '♡'}</button></div>
+        <Link className="app-card-figure" to={`/store/${slug}/product/${product.id}`}>{offPercent ? <span className="app-sale-badge">-{offPercent}%</span> : null}<span className="app-card-fit-pill">FIT</span><button className={cn('app-theme-heart', wished && 'wishlist-active')} type="button" onClick={(event) => { event.preventDefault(); onToggleWishlist(product.id); }}>{wished ? '♥' : '♡'}</button>{product.image ? <img className="app-card-img" src={product.image} alt={product.name} /> : <div className="app-card-img app-card-empty">No image</div>}</Link>
+        <div className="app-card-body"><div className="app-card-rating">★ {rating.toFixed(1)}</div><h3>{product.name}</h3><div className="app-card-price"><span className="price">{formatMoney(product.price)}</span>{compareAt ? <span className="old-price">{formatMoney(compareAt)}</span> : null}{offPercent ? <span className="app-off-pill">{offPercent}% OFF</span> : null}</div></div>
+        <div className="app-card-actions"><button className="primary-btn app-theme-one-btn" type="button" onClick={() => onAddToCart(product)}>Add to Cart</button></div>
       </div>
     );
   }
@@ -1323,7 +1329,7 @@ function StorePage() {
   }
 
   return (
-    <div className={cn('store-page', buildStoreThemeClass(store))} style={buildStoreThemeStyle(store)}>{renderDrawer()}<StoreHeader store={store} slug={slug} cartCount={cart.reduce((sum, item) => sum + item.quantity, 0)} wishlistCount={wishlist.length} isThemeOne={isThemeOne} onMenuToggle={() => setDrawerOpen(true)} /><div className="store-wrap">{storeState.loading ? <LoadingBlock label="Loading store..." /> : <>{isThemeOne ? renderSearchAndCategories() : null}{renderHero()}{!isThemeOne ? renderSearchAndCategories() : null}<section className="app-section"><div className="app-rail-head"><div><span className="app-eyebrow">Curated for mobile shoppers</span><h2 className="app-section-title">{themeConfig.productsTitle || labelSettings.productsHeading || 'All Products'}</h2></div></div>{productState.loading ? <LoadingBlock label="Loading products..." /> : <div className="app-grid">{products.map((product) => <ProductCard key={product.id} slug={slug} product={product} wished={wishlist.includes(product.id)} onAddToCart={addToCart} onToggleWishlist={toggleWishlist} isThemeOne={isThemeOne} />)}</div>}{!productState.loading && !products.length ? <EmptyState title="No products yet" body="This store has not published products yet." /> : null}</section></>}</div><nav className={cn('app-bottom-nav', isThemeOne && 'app-style-bottom-nav')}><NavLink end to={`/store/${slug}`}><span className="app-nav-icon">⌂</span><span>{themeConfig.menuHomeLabel || labelSettings.bottomNavHome || 'Home'}</span></NavLink><NavLink to={`/store/${slug}?view=shop`}><span className="app-nav-icon">▥</span><span>{themeConfig.menuShopLabel || 'Shop'}</span></NavLink><button className="app-nav-button" type="button" onClick={() => window.scrollTo({ top: 280, behavior: 'smooth' })}><span className="app-nav-icon">◫</span><span>{themeConfig.categoryNavLabel || labelSettings.categoriesHeading || 'Categories'}</span></button><NavLink to={`/store/${slug}/wishlist`}><span className="app-nav-icon">♡</span><span>{themeConfig.menuWishlistLabel || 'Wishlist'}</span></NavLink><NavLink to={customer && customer.slug === slug ? `/store/${slug}/account` : `/store/${slug}/account/login`}><span className="app-nav-icon">☷</span><span>{themeConfig.menuAccountLabel || labelSettings.bottomNavOrders || 'Orders'}</span></NavLink></nav></div>
+    <div className={cn('store-page', buildStoreThemeClass(store))} style={buildStoreThemeStyle(store)}>{renderDrawer()}<StoreHeader store={store} slug={slug} cartCount={cart.reduce((sum, item) => sum + item.quantity, 0)} wishlistCount={wishlist.length} isThemeOne={isThemeOne} onMenuToggle={() => setDrawerOpen(true)} themeConfig={themeConfig} /><div className="store-wrap">{storeState.loading ? <LoadingBlock label="Loading store..." /> : <>{isThemeOne ? renderSearchAndCategories() : null}{renderHero()}{!isThemeOne ? renderSearchAndCategories() : null}<section className="app-section"><div className="app-rail-head"><div><span className="app-eyebrow">Curated for mobile shoppers</span><h2 className="app-section-title">{themeConfig.productsTitle || labelSettings.productsHeading || 'All Products'}</h2></div></div>{productState.loading ? <LoadingBlock label="Loading products..." /> : <div className="app-grid">{products.map((product) => <ProductCard key={product.id} slug={slug} product={product} wished={wishlist.includes(product.id)} onAddToCart={addToCart} onToggleWishlist={toggleWishlist} isThemeOne={isThemeOne} />)}</div>}{!productState.loading && !products.length ? <EmptyState title="No products yet" body="This store has not published products yet." /> : null}</section></>}</div><nav className={cn('app-bottom-nav', isThemeOne && 'app-style-bottom-nav')}><NavLink end to={`/store/${slug}`}><span className="app-nav-icon">⌂</span><span>{themeConfig.menuHomeLabel || labelSettings.bottomNavHome || 'Home'}</span></NavLink><NavLink to={`/store/${slug}?view=shop`}><span className="app-nav-icon">▥</span><span>{themeConfig.menuShopLabel || 'Shop'}</span></NavLink><button className="app-nav-button" type="button" onClick={() => window.scrollTo({ top: 280, behavior: 'smooth' })}><span className="app-nav-icon">◫</span><span>{themeConfig.categoryNavLabel || labelSettings.categoriesHeading || 'Categories'}</span></button><NavLink to={`/store/${slug}/wishlist`}><span className="app-nav-icon">♡</span><span>{themeConfig.menuWishlistLabel || 'Wishlist'}</span></NavLink><NavLink to={customer && customer.slug === slug ? `/store/${slug}/account` : `/store/${slug}/account/login`}><span className="app-nav-icon">☷</span><span>{themeConfig.menuAccountLabel || labelSettings.bottomNavOrders || 'Orders'}</span></NavLink></nav></div>
   );
 }
 

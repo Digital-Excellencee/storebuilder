@@ -281,7 +281,10 @@ th { font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: 
 .app-header { position: sticky; top: 0; z-index: 55; }
 .app-header-premium { display: grid; grid-template-columns: auto 1fr auto; gap: 14px; align-items: center; padding: 14px 16px; background: #fff; border-bottom: 1px solid var(--border); }
 .app-style-header { background: #fff; border-bottom: 1px solid #eceff5; }
-.app-style-top-strip { display: flex; justify-content: center; gap: 18px; padding: 8px 14px; background: #151922; color: #f8fafc; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; overflow-x: auto; scrollbar-width: none; }
+.app-style-top-strip { padding: 8px 0; background: #151922; color: #f8fafc; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; overflow: hidden; }
+.app-style-top-track { display: flex; gap: 28px; white-space: nowrap; padding: 0 14px; }
+.app-style-top-track span::after { content: '•'; margin-left: 28px; opacity: .45; }
+.app-style-top-track.marquee { width: max-content; animation: ticker 18s linear infinite; }
 .app-style-top-strip::-webkit-scrollbar { display: none; }
 .app-style-brand-row { display: grid; grid-template-columns: 44px 1fr auto; align-items: center; padding: 14px 16px 10px; gap: 10px; }
 .app-style-menu-btn { width: 38px; height: 38px; border-radius: 50%; border: 0; background: transparent; color: #151922; display: grid; place-items: center; gap: 4px; }
@@ -320,6 +323,11 @@ th { font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: 
 .app-style-product-card .app-card-body { gap: 4px; }
 .app-style-product-card .app-card-body h3 { min-height: 0; font-size: 14px; font-weight: 800; }
 .app-style-product-card .primary-btn { min-height: 40px; font-size: 11px; letter-spacing: .06em; }
+.app-card-fit-pill { position: absolute; top: 10px; right: 10px; font-size: 10px; font-weight: 800; color: #111827; background: rgba(255,255,255,.75); border-radius: 999px; padding: 3px 7px; z-index: 2; }
+.app-theme-heart { position: absolute; top: 26px; right: 12px; width: 28px; height: 28px; border-radius: 50%; border: 0; background: rgba(255,255,255,.95); color: #111827; display: grid; place-items: center; z-index: 3; box-shadow: 0 4px 12px rgba(15,23,42,.12); }
+.app-card-rating { margin-left: auto; font-size: 12px; font-weight: 800; color: #f59e0b; }
+.app-off-pill { display: inline-flex; align-items: center; justify-content: center; padding: 4px 8px; border-radius: 999px; background: #16a34a; color: #fff; font-size: 10px; font-weight: 900; }
+.app-theme-one-btn { background: #0f1117 !important; color: #fff; border-radius: 12px; font-size: 13px; min-height: 44px; }
 .app-card-figure { position: relative; }
 .app-card-img { width: 100%; aspect-ratio: 0.85 / 1; object-fit: cover; background: #f1f5f9; }
 .app-card-empty, .app-product-placeholder { display: grid; place-items: center; color: var(--muted); background: #eef2f7; }
