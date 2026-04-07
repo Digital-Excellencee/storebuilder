@@ -113,6 +113,20 @@ function getPendingGoogleProfile(req) {
   return { email, name: name || email };
 }
 
+function decodeGoogleSignupToken(token) {
+  try {
+    const secret = process.env.JWT_SECRET || process.env.SESSION_SECRET;
+    const decoded = jwt.verify(String(token || ''), secret);
+    if (!decoded || decoded.role !== 'google-signup') return null;
+    const email = String(decoded.email || '').trim().toLowerCase();
+    const name = String(decoded.name || '').trim();
+    if (!email || !validateEmail(email)) return null;
+    return { email, name: name || email };
+  } catch (error) {
+    return null;
+  }
+}
+
 function sanitizeApiProduct(body) {
   return {
     name: String(body && body.name || '').trim(),
@@ -577,7 +591,7 @@ app.post('/api/store/:slug/auth/google/login', async (req, res) => {
 
 app.post('/api/auth/google/complete', async (req, res) => {
   try {
-    const profile = getPendingGoogleProfile(req);
+    const profile = getPendingGoogleProfile(req) || decodeGoogleSignupToken(req.body.signupToken);
     if (!profile) return res.status(404).json({ success: false, error: 'No pending Google profile' });
     const storeName = String(req.body.storeName || '').trim();
     const description = String(req.body.description || '').trim();

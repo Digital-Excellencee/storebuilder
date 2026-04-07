@@ -104,6 +104,11 @@ function createCustomerHandoffToken(customer, slug) {
   return jwt.sign({ customerId: customer.id, email: customer.email, storeSlug: slug, role: 'customer' }, secret, { expiresIn: '10m' });
 }
 
+function createGoogleSignupToken(email, name) {
+  const secret = process.env.JWT_SECRET || process.env.SESSION_SECRET;
+  return jwt.sign({ email: String(email || '').trim().toLowerCase(), name: String(name || '').trim(), role: 'google-signup' }, secret, { expiresIn: '15m' });
+}
+
 function createEmailVerificationState(verified) {
   if (verified) {
     return { emailVerified: true, emailVerificationToken: '', emailVerificationExpiry: 0 };
@@ -220,7 +225,8 @@ router.get('/auth/callback', route(async (req, res) => {
     res.redirect(`${getFrontendBaseUrl(req)}/login?google=1&token=${encodeURIComponent(handoff)}`);
     return;
   }
-  res.redirect(`${getFrontendBaseUrl(req)}/register?google=1&email=${encodeURIComponent(email)}&name=${encodeURIComponent(name)}`);
+  const signupToken = createGoogleSignupToken(email, name);
+  res.redirect(`${getFrontendBaseUrl(req)}/register?google=1&email=${encodeURIComponent(email)}&name=${encodeURIComponent(name)}&signup=${encodeURIComponent(signupToken)}`);
 }));
 
 router.get('/', route(async (req, res) => {

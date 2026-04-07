@@ -627,6 +627,7 @@ function VendorRegisterPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const googleMode = searchParams.get('google') === '1';
+  const googleSignupToken = searchParams.get('signup') || '';
   const missingAccount = searchParams.get('error') === 'account-not-found';
   const { registerVendor, completeVendorGoogleSignup } = useAuth();
   const [step, setStep] = useState(1);
@@ -657,7 +658,7 @@ function VendorRegisterPage() {
     setState({ loading: true, error: '' });
     try {
       const payload = { ...form };
-      if (googleMode) await completeVendorGoogleSignup(payload);
+      if (googleMode) await completeVendorGoogleSignup({ ...payload, signupToken: googleSignupToken });
       else await registerVendor(form);
       navigate('/dashboard');
     } catch (error) {
