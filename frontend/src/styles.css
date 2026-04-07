@@ -457,6 +457,7 @@ th { font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: 
 .theme-app-style .app-rail-head { padding: 0 4px; margin-bottom: 14px; }
 .theme-app-style .app-section-title { font-size: 20px; }
 .theme-app-style .app-card { border-radius: 18px; box-shadow: 0 8px 24px rgba(15,23,42,.07); overflow: hidden; }
+.theme-app-style .app-popular-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .theme-app-style .app-card-img { aspect-ratio: 0.82/1; }
 .theme-app-style .app-card-body { padding: 10px 12px 8px; gap: 4px; }
 .theme-app-style .app-card-body h3 { font-size: 13px; min-height: 38px; line-height: 1.28; }
@@ -721,6 +722,10 @@ th { font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: 
 
 @media (max-width: 1100px) {
   .hero-grid, .hero-grid, .grid-2, .mini-grid, .feat-grid, .sc-grid, .who-grid, .pricing-grid, .test-grid, .demo-layout, .checkout-layout, .footer-grid, .hero-grid { grid-template-columns: 1fr; }
+}
+
+@media (min-width: 900px) {
+  .theme-app-style .app-popular-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 
 @media (max-width: 820px) {
