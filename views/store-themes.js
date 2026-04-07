@@ -403,10 +403,10 @@ function renderAppThemeScaffold(store, slug, options) {
   const bottomNav = `
     <nav class="app-bottom-nav nav-modern">
       <a href="${base || '/'}" class="${activeNav === 'home' ? 'active' : ''}"><svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg><span>Home</span></a>
-      <a href="${base || '/'}?category=all" class="${activeNav === 'shop' ? 'active' : ''}"><svg viewBox="0 0 24 24"><path d="M6 2l3 7h10l3-7"></path><path d="M3 10h18l-2 10H5L3 10z"></path></svg><span>Shop</span></a>
+      <a href="${base || '/'}?category=all" class="${activeNav === 'shop' ? 'active' : ''}"><svg viewBox="0 0 24 24"><path d="M6 2l3 7h10l3-7"></path><path d="M3 10h18l-2 10H5L3 10z"></path></svg><span>Shop All</span></a>
       <button type="button" class="${activeNav === 'categories' ? 'active' : ''}" data-panel-open="menu"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg><span>Categories</span></button>
       <button type="button" class="${activeNav === 'wishlist' ? 'active' : ''}" data-panel-open="wishlist"><svg viewBox="0 0 24 24"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg><span>Wishlist</span></button>
-      <button type="button" class="${activeNav === 'account' ? 'active' : ''}" data-panel-open="account"><svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg><span>My Account</span></button>
+      <button type="button" class="${activeNav === 'account' ? 'active' : ''}" data-panel-open="account"><svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg><span>Account</span></button>
     </nav>`;
   return `<div class="app-shell app-shell-premium">
     <div class="app-page-overlay" data-panel-overlay></div>
