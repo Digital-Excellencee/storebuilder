@@ -215,11 +215,18 @@ router.get('/superadmin/login-as-vendor/:userId', requireSuperAdmin, route(async
   req.session.userId = user.id;
   req.session.storeSlug = user.storeSlug;
   req.session.fromSuperAdmin = true;
-  req.session.superAdminId = null;
   res.redirect('/dashboard');
 }));
 
-router.get('/superadmin/return-from-vendor', requireSuperAdmin, route(async (req, res) => {
+router.get('/superadmin/return-from-vendor', route(async (req, res) => {
+  if (!req.session.superAdminId) {
+    setFlash(req, 'error', 'Super admin session not found.');
+    res.redirect('/superadmin');
+    return;
+  }
+  req.session.userId = null;
+  req.session.storeSlug = null;
+  req.session.fromSuperAdmin = null;
   setFlash(req, 'success', 'Returned to Super Admin panel.');
   res.redirect('/superadmin/dashboard');
 }));

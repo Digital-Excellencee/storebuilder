@@ -440,6 +440,13 @@ router.post('/login', route(async (req, res) => {
 router.get('/logout', route(async (req, res) => {
   try {
     const wasFromSuperAdmin = req.session.fromSuperAdmin;
+    if (wasFromSuperAdmin) {
+      req.session.userId = null;
+      req.session.storeSlug = null;
+      req.session.fromSuperAdmin = null;
+      res.redirect('/superadmin/dashboard');
+      return;
+    }
     await new Promise((resolve) => req.session.destroy(() => resolve()));
     if (wasFromSuperAdmin) {
       res.redirect('/superadmin/dashboard');
