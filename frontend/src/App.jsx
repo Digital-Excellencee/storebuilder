@@ -1346,6 +1346,9 @@ function StorePage() {
   }
 
   function renderHero() {
+    if (isThemeOne) {
+      return <section className="app-feature-hero app-style-hero app-style-hero-image-only"><div className="app-feature-media">{desktopBanner ? <picture>{mobileBanner ? <source media="(max-width: 640px)" srcSet={mobileBanner} /> : null}<img src={desktopBanner} alt={store.name} /></picture> : <div className="app-card-empty" style={{ minHeight: 420 }}>{store.name}</div>}</div></section>;
+    }
     return <section className={cn('app-feature-hero', isThemeOne && 'app-style-hero')}><div className="app-feature-media">{desktopBanner ? <picture>{mobileBanner ? <source media="(max-width: 640px)" srcSet={mobileBanner} /> : null}<img src={desktopBanner} alt={store.name} /></picture> : <div className="app-card-empty" style={{ minHeight: 420 }}>{store.name}</div>}</div><div className={cn('app-feature-overlay', isThemeOne && 'app-style-overlay')}><span className="app-eyebrow">Featured Store</span><h1>{(themeConfig.bannerTitle || store.name || '').toUpperCase()}</h1><p>{themeConfig.bannerSubtitle || store.description || 'A beautiful storefront built for mobile shoppers, fast checkout, and repeat customers.'}</p><div className="app-feature-actions"><Link className="btn" to={`/store/${slug}/cart`}>{themeConfig.bannerCta || labelSettings.addProductButton || 'Open cart'}</Link><Link className="btn btn-secondary" to={`/store/${slug}/track-order`}>{themeConfig.bannerSecondaryCta || labelSettings.bottomNavOrders || 'Track order'}</Link></div></div></section>;
   }
 
