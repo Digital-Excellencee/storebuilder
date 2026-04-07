@@ -28,15 +28,19 @@ function loadEnvFile() {
 loadEnvFile();
 
 const ROOT_DIR = path.join(__dirname, '..');
+const STORAGE_ROOT = process.env.STORAGE_ROOT
+  ? path.resolve(process.env.STORAGE_ROOT)
+  : ROOT_DIR;
 
 const config = {
   PORT: Number(process.env.PORT) || 3000,
   ROOT_DIR,
-  DB_PATH: path.join(ROOT_DIR, 'database.json'),
-  SESSION_PATH: path.join(ROOT_DIR, 'sessions.json'),
-  PUBLIC_DIR: path.join(ROOT_DIR, 'public'),
-  LOGOS_DIR: path.join(ROOT_DIR, 'public', 'logos'),
-  PRODUCTS_DIR: path.join(ROOT_DIR, 'products'),
+  STORAGE_ROOT,
+  DB_PATH: process.env.DB_PATH ? path.resolve(process.env.DB_PATH) : path.join(STORAGE_ROOT, 'database.json'),
+  SESSION_PATH: process.env.SESSION_PATH ? path.resolve(process.env.SESSION_PATH) : path.join(STORAGE_ROOT, 'sessions.json'),
+  PUBLIC_DIR: process.env.PUBLIC_DIR ? path.resolve(process.env.PUBLIC_DIR) : path.join(STORAGE_ROOT, 'public'),
+  LOGOS_DIR: process.env.LOGOS_DIR ? path.resolve(process.env.LOGOS_DIR) : path.join(process.env.PUBLIC_DIR ? path.resolve(process.env.PUBLIC_DIR) : path.join(STORAGE_ROOT, 'public'), 'logos'),
+  PRODUCTS_DIR: process.env.PRODUCTS_DIR ? path.resolve(process.env.PRODUCTS_DIR) : path.join(STORAGE_ROOT, 'products'),
   ALLOWED_MIMES: ['image/jpeg', 'image/png', 'image/webp', 'image/gif'],
   ORDER_STATUSES: ['pending', 'confirmed', 'shipped', 'cancelled', 'delivered'],
   BASE_DOMAIN: (process.env.BASE_DOMAIN || '').toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*$/, ''),
