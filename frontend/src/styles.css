@@ -456,13 +456,18 @@ th { font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: 
 .theme-app-style .app-section { padding: 20px 0 0; }
 .theme-app-style .app-rail-head { padding: 0 4px; margin-bottom: 14px; }
 .theme-app-style .app-section-title { font-size: 20px; }
-.theme-app-style .app-card { border-radius: 18px; box-shadow: 0 8px 24px rgba(15,23,42,.07); }
-.theme-app-style .app-card-img { aspect-ratio: 0.85/1; }
+.theme-app-style .app-card { border-radius: 18px; box-shadow: 0 8px 24px rgba(15,23,42,.07); overflow: hidden; }
+.theme-app-style .app-card-img { aspect-ratio: 0.82/1; }
 .theme-app-style .app-card-body { padding: 10px 12px 8px; gap: 4px; }
-.theme-app-style .app-card-body h3 { font-size: 13px; min-height: 34px; }
-.theme-app-style .price { font-size: 15px; }
+.theme-app-style .app-card-body h3 { font-size: 13px; min-height: 38px; line-height: 1.28; }
+.theme-app-style .price { font-size: 16px; }
 .theme-app-style .old-price { font-size: 11px; }
-.theme-app-style .app-theme-one-btn { min-height: 38px; border-radius: 10px; font-size: 11px; }
+.theme-app-style .app-card-actions { padding: 0 10px 10px; }
+.theme-app-style .app-theme-one-btn { min-height: 40px; border-radius: 10px; font-size: 11px; }
+.theme-app-style .app-card-rating { font-size: 11px; }
+.theme-app-style .app-sale-badge { top: 10px; left: 10px; padding: 5px 9px; font-size: 10px; }
+.theme-app-style .app-theme-heart { top: 10px; right: 10px; width: 28px; height: 28px; }
+.theme-app-style .app-card-fit-pill { top: 10px; right: 44px; font-size: 10px; }
 .theme-app-style .view-all-wrap { display: flex; justify-content: center; margin: 18px 0 0; }
 .theme-app-style .view-all-btn { min-height: 46px; padding: 0 28px; border-radius: 12px; background: #111827; color: #fff; font-weight: 800; }
 .theme-app-style .trust-grid { display: grid; grid-template-columns: repeat(2,1fr); gap: 10px; margin-top: 24px; padding: 16px; border-radius: 18px; background: #0d0d0d; }
@@ -485,9 +490,9 @@ th { font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: 
 .theme-app-style .footer-bottom { padding-top: 16px; border-top: 1px solid rgba(255,255,255,.07); display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
 .theme-app-style .footer-bottom span { font-size: 11px; color: #555; }
 .theme-app-style .app-bottom-nav { display: flex; position: fixed; left: 50%; transform: translateX(-50%); width: calc(min(480px,100%) - 20px); bottom: 10px; gap: 4px; align-items: stretch; background: #fff; border: 1px solid #e5e7eb; box-shadow: 0 -8px 30px rgba(15,23,42,.12); z-index: 60; padding: 8px; border-radius: 22px; }
-.theme-app-style .app-bottom-nav a { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; padding: 8px 3px; border-radius: 14px; color: #9ca3af; font-size: 10px; font-weight: 700; text-align: center; }
+.theme-app-style .app-bottom-nav a { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; padding: 9px 2px 8px; border-radius: 14px; color: #9ca3af; font-size: 10px; font-weight: 700; text-align: center; line-height: 1.08; }
 .theme-app-style .app-bottom-nav a.active { color: #111827; background: #f4f4f5; }
-.theme-app-style .app-nav-icon { font-size: 18px; line-height: 1; display: flex; align-items: center; justify-content: center; }
+.theme-app-style .app-nav-icon { font-size: 18px; line-height: 1; display: flex; align-items: center; justify-content: center; margin-bottom: 2px; }
 .theme-app-style .app-nav-icon svg { width: 18px; height: 18px; display: block; }
 
 .theme-two-page { --store-primary: #111827; background: #f8f8f8; color: #1a1a1a; }
