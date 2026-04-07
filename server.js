@@ -713,7 +713,9 @@ app.get('/api/store/:slug', async (req, res) => {
         theme: store.theme,
         themeConfig: store.themeConfig,
         storeSettings: store.storeSettings,
+        paymentSettings: store.paymentSettings || {},
         categories: store.categories || [],
+        collections: store.collections || [],
         initialProducts,
         totalProducts: (store.products || []).filter((product) => product.active !== false).length,
         visits: store.visits,
@@ -745,7 +747,11 @@ app.get('/api/store/:slug/products', async (req, res) => {
     }
     if (category && category !== 'all') {
       const cats = store.categories || [];
-      products = products.filter((product) => cats.some((item) => item.name === category && (item.productIds || []).includes(product.id)));
+      products = products.filter((product) => {
+        const matchesByName = String(product.category || '').trim().toLowerCase() === category.trim().toLowerCase();
+        const matchesByRelation = cats.some((item) => item.name === category && (item.productIds || []).includes(product.id));
+        return matchesByName || matchesByRelation;
+      });
     }
     if (sort === 'price_asc') products.sort((a, b) => parseFloat(a.price) - parseFloat(b.price));
     else if (sort === 'price_desc') products.sort((a, b) => parseFloat(b.price) - parseFloat(a.price));
@@ -756,6 +762,20 @@ app.get('/api/store/:slug/products', async (req, res) => {
     const totalPages = Math.ceil(total / perPage);
     const paged = products.slice((pageNum - 1) * perPage, pageNum * perPage);
     res.json({ success: true, products: paged, total, page: pageNum, totalPages, perPage });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.get('/api/store/:slug/page/:pageSlug', async (req, res) => {
+  try {
+    const db = await loadDB();
+    const store = getApiStore(db, req.params.slug);
+    if (!store) return res.status(404).json({ success: false, error: 'Store not found' });
+    const pageSlug = String(req.params.pageSlug || '').trim();
+    const page = (store.pages || []).find((entry) => entry.active !== false && String(entry.slug || '').trim() === pageSlug);
+    if (!page) return res.status(404).json({ success: false, error: 'Page not found' });
+    res.json({ success: true, page });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
   }
@@ -1307,8 +1327,15 @@ app.put('/api/dashboard/payments', requireApiAuth, async (req, res) => {
     const store = getVendorStoreFromReq(db, req);
     if (!store) return res.status(404).json({ success: false, error: 'Store not found' });
     store.paymentSettings = { mode: String(req.body.mode || 'whatsapp'), notes: String(req.body.notes || '').trim() };
+    store.storeSettings = store.storeSettings && typeof store.storeSettings === 'object' ? store.storeSettings : {};
+    store.storeSettings.paymentSettings = Object.assign({}, store.storeSettings.paymentSettings || {}, {
+      cod: store.paymentSettings.mode === 'cod' || store.paymentSettings.mode === 'both',
+      onlinePayment: store.paymentSettings.mode === 'online' || store.paymentSettings.mode === 'both',
+      whatsappOrder: store.paymentSettings.mode === 'whatsapp' || store.paymentSettings.mode === 'both',
+      bankDetails: store.paymentSettings.notes
+    });
     await saveDB(db);
-    res.json({ success: true, paymentSettings: store.paymentSettings });
+    res.json({ success: true, paymentSettings: store.paymentSettings, storeSettings: store.storeSettings.paymentSettings });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
   }
@@ -1763,16 +1790,42 @@ app.post('/api/store/:slug/checkout', async (req, res) => {
     const email = String(req.body.email || '').trim().toLowerCase();
     const shippingAddress = String(req.body.shippingAddress || '').trim();
     const notes = String(req.body.notes || '').trim();
+    const couponCode = String(req.body.couponCode || '').trim().toUpperCase();
     const paymentMethod = ['cod', 'online', 'whatsapp'].includes(String(req.body.paymentMethod || '').trim()) ? String(req.body.paymentMethod || '').trim() : 'cod';
+    const unifiedPaymentSettings = Object.assign({}, (store.storeSettings && store.storeSettings.paymentSettings) || {}, store.paymentSettings || {});
+    const allowedModes = [];
+    if (unifiedPaymentSettings.cod || unifiedPaymentSettings.mode === 'cod' || unifiedPaymentSettings.mode === 'both') allowedModes.push('cod');
+    if (unifiedPaymentSettings.onlinePayment || unifiedPaymentSettings.mode === 'online' || unifiedPaymentSettings.mode === 'both') allowedModes.push('online');
+    if (unifiedPaymentSettings.whatsappOrder || unifiedPaymentSettings.mode === 'whatsapp' || unifiedPaymentSettings.mode === 'both') allowedModes.push('whatsapp');
+    const effectiveAllowedModes = allowedModes.length ? Array.from(new Set(allowedModes)) : ['cod', 'online', 'whatsapp'];
+    if (!effectiveAllowedModes.includes(paymentMethod)) {
+      return res.status(400).json({ success: false, error: 'Selected payment method is not available' });
+    }
     const lineItems = buildApiCheckoutLineItems(store, req.body.items);
     if (!name || !validateEmail(email) || phone.length < 10 || !shippingAddress || !lineItems.length) {
       return res.status(400).json({ success: false, error: 'Invalid checkout data' });
     }
     const subtotal = lineItems.reduce((sum, item) => sum + item.subtotal, 0);
+    const discounts = Array.isArray(store.discounts) ? store.discounts : [];
+    const coupon = couponCode ? discounts.find((entry) => entry.active !== false && String(entry.code || '').trim().toUpperCase() === couponCode) : null;
+    let discountAmount = 0;
+    if (coupon) {
+      if (String(coupon.type || '').trim() === 'flat') {
+        discountAmount = Math.min(subtotal, Number(coupon.value || 0));
+      } else {
+        discountAmount = Math.min(subtotal, subtotal * (Math.max(0, Number(coupon.value || 0)) / 100));
+      }
+    }
+    const discountedSubtotal = Math.max(0, subtotal - discountAmount);
     const shippingFee = getEffectiveShippingFee(store, subtotal);
     const taxRate = store.taxSettings && store.taxSettings.enabled ? Number(store.taxSettings.rate || 0) : 0;
-    const taxAmount = store.taxSettings && store.taxSettings.enabled ? subtotal * (taxRate / 100) : 0;
-    const total = applyRoundingMode(subtotal + shippingFee + taxAmount, store.storeSettings && store.storeSettings.checkoutSettings ? store.storeSettings.checkoutSettings.roundingMode : 'none');
+    const taxAmount = store.taxSettings && store.taxSettings.enabled ? discountedSubtotal * (taxRate / 100) : 0;
+    const checkoutSettings = store.storeSettings && store.storeSettings.checkoutSettings ? store.storeSettings.checkoutSettings : null;
+    const minimumOrderAmount = checkoutSettings ? Number(checkoutSettings.minimumOrderAmount || 0) : 0;
+    if (minimumOrderAmount > 0 && discountedSubtotal < minimumOrderAmount) {
+      return res.status(400).json({ success: false, error: `Minimum order amount is ${minimumOrderAmount}` });
+    }
+    const total = applyRoundingMode(discountedSubtotal + shippingFee + taxAmount, checkoutSettings ? checkoutSettings.roundingMode : 'none');
     const createdAt = new Date().toISOString();
     const trackingCode = generateTrackingCode();
     const order = {
@@ -1794,6 +1847,8 @@ app.post('/api/store/:slug/checkout', async (req, res) => {
       status: paymentMethod === 'cod' ? 'confirmed' : 'pending',
       amount: String(total),
       subtotal: String(subtotal),
+      discountCode: coupon ? coupon.code : '',
+      discountAmount: String(discountAmount),
       shippingFee: String(shippingFee),
       taxAmount: String(taxAmount),
       createdAt,
