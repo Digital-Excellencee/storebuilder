@@ -5,7 +5,8 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "build": "node -e \"console.log('build ok')\""
+    "build": "npm install --prefix frontend && npm run build --prefix frontend",
+    "postinstall": "npm install --prefix frontend && npm run build --prefix frontend"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.101.1",

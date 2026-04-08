@@ -23,6 +23,7 @@ try { MemoryStore = require('memorystore')(session); } catch (e) { console.log('
 
 const app = express();
 const { PORT, ROOT_DIR, DB_PATH, SESSION_PATH, PUBLIC_DIR, LOGOS_DIR, PRODUCTS_DIR, SESSION_SECRET, ORDER_STATUSES } = config;
+const FRONTEND_DIST_DIR = path.join(ROOT_DIR, 'frontend', 'dist');
 const JWT_SECRET = process.env.JWT_SECRET || SESSION_SECRET;
 const FRONTEND_FRAME_ANCESTORS = [
   "'self'",
@@ -373,6 +374,7 @@ if (rateLimit) {
 }
 
 app.use('/public', express.static(PUBLIC_DIR, { maxAge: '7d', etag: true, lastModified: true }));
+app.use('/app', express.static(FRONTEND_DIST_DIR, { maxAge: '7d', etag: true, lastModified: true }));
 
 const SLOW_REQUEST_MS = Number(process.env.SLOW_REQUEST_MS || 800);
 app.use((req, res, next) => {
@@ -2080,6 +2082,15 @@ app.get('/migration-status', async (req, res) => {
 
 // Routes
 app.use('/', require('./routes'));
+
+app.get('/app/*', (req, res, next) => {
+  const indexFile = path.join(FRONTEND_DIST_DIR, 'index.html');
+  if (!fs.existsSync(indexFile)) {
+    next();
+    return;
+  }
+  res.sendFile(indexFile);
+});
 
 // 404 handler
 const { renderGlobalError } = require('./views/error-views');
