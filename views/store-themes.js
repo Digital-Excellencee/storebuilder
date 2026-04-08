@@ -343,7 +343,7 @@ function renderAppThemeScaffold(store, slug, options) {
   const cartTotal = cartDetails.reduce((sum, item) => sum + Number(item.subtotal || 0), 0);
   const menuLinks = [
     { href: base || '/', label: cfg.menuHomeLabel || 'Home' },
-    { href: `${base || '/'}?category=all`, label: cfg.menuShopLabel || 'Shop' },
+    { href: `${base}/shop`, label: cfg.menuShopLabel || 'Shop' },
     { href: `${base}/track-order`, label: cfg.menuTrackLabel || 'Track Order' },
     { href: customer ? `${base}/account/orders` : `${base}/account/login`, label: 'Orders' },
     { href: `${base}/checkout?mode=cart`, label: 'Checkout' }
@@ -377,7 +377,7 @@ function renderAppThemeScaffold(store, slug, options) {
     <aside class="app-side-panel app-side-panel-right" data-panel="account">
       <div class="app-panel-head"><strong>${customer ? 'My Account' : 'Account'}</strong><button type="button" class="app-panel-close" data-panel-close>×</button></div>
       <div class="app-panel-scroll">
-        ${customer ? `<div class="app-account-card"><strong>${escapeHtml(customer.name)}</strong><span>${escapeHtml(customer.email)}</span></div><div class="app-panel-nav"><a href="${base}/account">Profile</a><a href="${base}/account/orders">Orders</a><a href="${base}/account/wishlist">Saved Wishlist</a><a href="${base}/account/logout">Logout</a></div>` : `<div class="app-panel-empty"><div class="app-panel-empty-icon">👤</div><h3>Login for faster checkout</h3><p>Save orders, addresses, and wishlist across visits.</p><div class="app-panel-actions"><a class="btn" href="${base}/account/login">Login</a><a class="btn btn-secondary" href="${base}/account/register">Create Account</a></div></div>`}
+        ${customer ? `<div class="app-account-card"><strong>${escapeHtml(customer.name)}</strong><span>${escapeHtml(customer.email)}</span></div><div class="app-panel-nav"><a href="${base}/account">Profile</a><a href="${base}/account/orders">Orders</a><a href="${base}/account/wishlist">Saved Wishlist</a><form method="POST" action="${base}/account/logout"><button type="submit" class="app-panel-link-btn">Logout</button></form></div>` : `<div class="app-panel-empty"><div class="app-panel-empty-icon">👤</div><h3>Login for faster checkout</h3><p>Save orders, addresses, and wishlist across visits.</p><div class="app-panel-actions"><a class="btn" href="${base}/account/login">Login</a><a class="btn btn-secondary" href="${base}/account/register">Create Account</a></div></div>`}
       </div>
     </aside>`;
   const headerHtml = `
@@ -403,8 +403,8 @@ function renderAppThemeScaffold(store, slug, options) {
   const bottomNav = `
     <nav class="app-bottom-nav nav-modern">
       <a href="${base || '/'}" class="${activeNav === 'home' ? 'active' : ''}"><svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg><span>Home</span></a>
-      <a href="${base || '/'}?category=all" class="${activeNav === 'shop' ? 'active' : ''}"><svg viewBox="0 0 24 24"><path d="M6 2l3 7h10l3-7"></path><path d="M3 10h18l-2 10H5L3 10z"></path></svg><span>Shop All</span></a>
-      <button type="button" class="${activeNav === 'categories' ? 'active' : ''}" data-panel-open="menu"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg><span>Categories</span></button>
+      <a href="${base}/shop" class="${activeNav === 'shop' ? 'active' : ''}"><svg viewBox="0 0 24 24"><path d="M6 2l3 7h10l3-7"></path><path d="M3 10h18l-2 10H5L3 10z"></path></svg><span>Shop All</span></a>
+      <a href="${base}/categories" class="${activeNav === 'categories' ? 'active' : ''}"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg><span>Categories</span></a>
       <button type="button" class="${activeNav === 'wishlist' ? 'active' : ''}" data-panel-open="wishlist"><svg viewBox="0 0 24 24"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg><span>Wishlist</span></button>
       <button type="button" class="${activeNav === 'account' ? 'active' : ''}" data-panel-open="account"><svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg><span>Account</span></button>
     </nav>`;
@@ -503,6 +503,137 @@ function renderAppProductCard(product, options) {
   </article>`;
 }
 
+function renderAppShopAllPage(store, slug, data) {
+  const {
+    products,
+    cartCount,
+    wishlistCount,
+    wishlist,
+    search,
+    customer,
+    cfg,
+    paginationHtml,
+    storeBase,
+    cartDetails = [],
+    wishlistItems = [],
+    labels,
+    totalProducts
+  } = data;
+  const base = storeBase !== undefined ? storeBase : '/store/' + encodeURIComponent(slug);
+  const productCards = products.map((product) => renderAppProductCard(product, {
+    base,
+    wished: wishlist.includes(product.id),
+    cfg,
+    labels,
+    compact: false
+  })).join('');
+  const content = `
+    <section class="app-shop-head">
+      <div class="app-shop-topline">
+        <a class="app-shop-back" href="${base || '/'}" aria-label="Back to home">←</a>
+        <div>
+          <span class="app-eyebrow">Browse everything</span>
+          <h1 class="app-shop-title">Shop All</h1>
+        </div>
+      </div>
+      <form method="GET" action="${base}/shop" class="app-search-form app-shop-search">
+        <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"></circle><path d="m21 21-4.35-4.35"></path></svg>
+        <input name="search" value="${escapeHtml(search || '')}" placeholder="${escapeHtml((labels && labels.searchBoxText) || 'Search products...')}">
+      </form>
+      <div class="app-shop-meta">${escapeHtml(String(totalProducts || products.length))} products</div>
+    </section>
+    <section class="app-section app-shop-grid-wrap">
+      <div class="app-grid">${productCards || '<div class="store-empty">No products yet.</div>'}</div>
+      ${paginationHtml || ''}
+    </section>
+    ${renderStoreFooterBlock(store, cfg)}`;
+  return renderAppThemeScaffold(store, slug, {
+    base,
+    cfg,
+    customer,
+    cartCount,
+    wishlistCount,
+    cartDetails,
+    wishlistItems,
+    categories: [],
+    labels,
+    search,
+    activeNav: 'shop',
+    content,
+    floatingWhatsapp: true,
+    showSearch: false
+  });
+}
+
+function renderAppCategoriesPage(store, slug, data) {
+  const {
+    categories = [],
+    products = [],
+    cartCount,
+    wishlistCount,
+    wishlist,
+    search,
+    customer,
+    cfg,
+    storeBase,
+    cartDetails = [],
+    wishlistItems = [],
+    labels
+  } = data;
+  const base = storeBase !== undefined ? storeBase : '/store/' + encodeURIComponent(slug);
+  const term = String(search || '').trim().toLowerCase();
+  const visibleCategories = categories.filter((category) => {
+    if (!term) return true;
+    return String(category.name || '').toLowerCase().includes(term);
+  });
+  const cards = visibleCategories.map((category) => {
+    const count = (category.productIds || []).filter((id) => products.some((p) => p.id === id && p.active !== false)).length;
+    const previewProduct = products.find((p) => (category.productIds || []).includes(p.id) && p.active !== false) || products.find((p) => String(p.category || '').trim() === String(category.name || '').trim() && p.active !== false);
+    return `<a class="app-category-card" href="${base}/shop?category=${encodeURIComponent(category.name)}">
+      <div class="app-category-card-media">${previewProduct && previewProduct.image ? `<img src="${escapeHtml(previewProduct.image)}" alt="${escapeHtml(category.name)}">` : `<div class="app-category-card-ph">${escapeHtml((category.name || 'C').charAt(0).toUpperCase())}</div>`}</div>
+      <div class="app-category-card-body">
+        <strong>${escapeHtml(category.name)}</strong>
+        <span>${escapeHtml(String(count))} products</span>
+      </div>
+    </a>`;
+  }).join('');
+  const content = `
+    <section class="app-categories-head">
+      <div class="app-shop-topline">
+        <a class="app-shop-back" href="${base || '/'}" aria-label="Back to home">←</a>
+        <div>
+          <span class="app-eyebrow">Browse by type</span>
+          <h1 class="app-shop-title">Categories</h1>
+        </div>
+      </div>
+      <form method="GET" action="${base}/categories" class="app-search-form app-shop-search">
+        <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"></circle><path d="m21 21-4.35-4.35"></path></svg>
+        <input name="search" value="${escapeHtml(search || '')}" placeholder="${escapeHtml((labels && labels.searchBoxText) || 'Search categories...')}">
+      </form>
+      <div class="app-shop-meta">${escapeHtml(String(visibleCategories.length))} categories</div>
+    </section>
+    <section class="app-section app-category-grid-wrap">
+      <div class="app-category-grid">${cards || '<div class="store-empty">No categories yet.</div>'}</div>
+    </section>
+    ${renderStoreFooterBlock(store, cfg)}`;
+  return renderAppThemeScaffold(store, slug, {
+    base,
+    cfg,
+    customer,
+    cartCount,
+    wishlistCount,
+    cartDetails,
+    wishlistItems,
+    categories,
+    labels,
+    search,
+    activeNav: 'categories',
+    content,
+    floatingWhatsapp: true,
+    showSearch: false
+  });
+}
+
 function renderMinimalStore(store, slug, data) {
   const { products, categories, cartCount, wishlist, search, selectedCategory, currentTemplate, customer, cfg, storeBase } = data;
   const base = storeBase !== undefined ? storeBase : '/store/' + encodeURIComponent(slug);
@@ -552,6 +683,8 @@ module.exports = {
   renderStoreByTheme,
   renderAppThemeScaffold,
   renderAppProductPage,
+  renderAppShopAllPage,
+  renderAppCategoriesPage,
   renderAppStyleStore,
   renderMinimalStore,
   renderBoldFashionStore

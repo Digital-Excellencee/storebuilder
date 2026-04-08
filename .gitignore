@@ -1,3 +1,10 @@
 .env
 route-test.log
 route-test.err
+node_modules/
+frontend/node_modules/
+server.log
+server.err
+email-events.log
+sessions.json
+audit.log

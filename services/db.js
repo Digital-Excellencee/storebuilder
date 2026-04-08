@@ -861,6 +861,7 @@ async function flushPendingStoreVisits() {
 
 function writeLocalDBSync(db) {
   const normalized = normalizeDB(db);
+  fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
   const tempPath = DB_PATH + '.tmp';
   fs.writeFileSync(tempPath, JSON.stringify(normalized, null, 2), 'utf8');
   fs.renameSync(tempPath, DB_PATH);
@@ -1705,6 +1706,7 @@ async function deleteStoreProductFast(db, storeSlug, productId) {
 
 function loadSessionData() {
   try {
+    fs.mkdirSync(path.dirname(SESSION_PATH), { recursive: true });
     if (!fs.existsSync(SESSION_PATH)) {
       fs.writeFileSync(SESSION_PATH, '{}', 'utf8');
       return {};
@@ -1721,10 +1723,13 @@ function loadSessionData() {
 }
 
 function saveSessionData(data) {
+  fs.mkdirSync(path.dirname(SESSION_PATH), { recursive: true });
   fs.writeFileSync(SESSION_PATH, JSON.stringify(data || {}, null, 2), 'utf8');
 }
 
 function ensureDirectories() {
+  fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
+  fs.mkdirSync(path.dirname(SESSION_PATH), { recursive: true });
   if (!fs.existsSync(PUBLIC_DIR)) {
     fs.mkdirSync(PUBLIC_DIR, { recursive: true });
   }

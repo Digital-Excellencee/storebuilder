@@ -15,6 +15,8 @@ const { createRazorpayOrder, getRazorpayConfig } = require('./services/razorpay'
 const { sendEmail } = require('./services/email');
 const { getAppCatalog, getAppDefinition, normalizeStoreApps } = require('./services/apps');
 const { upload, csvUpload } = require('./middleware/upload');
+const { subdomainMiddleware } = require('./middleware/subdomain');
+const { sameOriginGuard } = require('./middleware/request-security');
 
 let helmet, rateLimit, MemoryStore;
 try { helmet = require('helmet'); } catch (e) { console.log('[WARN] Install helmet: npm install helmet'); }
@@ -22,7 +24,7 @@ try { rateLimit = require('express-rate-limit'); } catch (e) { console.log('[WAR
 try { MemoryStore = require('memorystore')(session); } catch (e) { console.log('[WARN] Install memorystore: npm install memorystore'); }
 
 const app = express();
-const { PORT, ROOT_DIR, DB_PATH, SESSION_PATH, PUBLIC_DIR, LOGOS_DIR, PRODUCTS_DIR, SESSION_SECRET, ORDER_STATUSES } = config;
+const { PORT, ROOT_DIR, STORAGE_ROOT, DB_PATH, SESSION_PATH, PUBLIC_DIR, LOGOS_DIR, PRODUCTS_DIR, SESSION_SECRET, ORDER_STATUSES, BASE_DOMAIN } = config;
 const FRONTEND_DIST_DIR = path.join(ROOT_DIR, 'frontend', 'dist');
 const JWT_SECRET = process.env.JWT_SECRET || SESSION_SECRET;
 const FRONTEND_FRAME_ANCESTORS = [
@@ -274,17 +276,17 @@ async function ensureDatabaseReady() {
   ensureDirectories();
   let db = await loadDB();
   let changed = false;
-  const saEmail = process.env.SUPER_ADMIN_EMAIL || 'admin@myshopbuilder.com';
-  const saPass = process.env.SUPER_ADMIN_PASSWORD || 'change-me-now';
-  if (!db.superAdmin || !db.superAdmin.email || !db.superAdmin.passwordHash) {
+  const saEmail = String(process.env.SUPER_ADMIN_EMAIL || '').trim().toLowerCase();
+  const saPass = String(process.env.SUPER_ADMIN_PASSWORD || '');
+  if ((!db.superAdmin || !db.superAdmin.email || !db.superAdmin.passwordHash) && saEmail && saPass) {
     db.superAdmin = { email: saEmail, passwordHash: hashPassword(saPass) };
     changed = true;
-  } else if (process.env.SUPER_ADMIN_EMAIL || process.env.SUPER_ADMIN_PASSWORD) {
-    if (db.superAdmin.email !== saEmail) {
+  } else if ((saEmail || saPass) && db.superAdmin && db.superAdmin.email && db.superAdmin.passwordHash) {
+    if (saEmail && db.superAdmin.email !== saEmail) {
       db.superAdmin.email = saEmail;
       changed = true;
     }
-    if (process.env.SUPER_ADMIN_PASSWORD) {
+    if (saPass) {
       db.superAdmin.passwordHash = hashPassword(saPass);
       changed = true;
     }
@@ -293,7 +295,25 @@ async function ensureDatabaseReady() {
     db.templates = DEFAULT_TEMPLATES;
     changed = true;
   }
+  if ((!db.superAdmin || !db.superAdmin.email || !db.superAdmin.passwordHash) && !(saEmail && saPass)) {
+    console.warn('[SECURITY] Super admin credentials are not configured. Set SUPER_ADMIN_EMAIL and SUPER_ADMIN_PASSWORD.');
+  } else if (db.superAdmin && String(db.superAdmin.email || '').trim().toLowerCase() === 'admin@myshopbuilder.com' && verifyPassword('change-me-now', db.superAdmin.passwordHash)) {
+    console.warn('[SECURITY] Default super admin credentials are still active. Rotate them immediately with SUPER_ADMIN_EMAIL and SUPER_ADMIN_PASSWORD.');
+  }
   if (changed) { await saveDB(db); }
+}
+
+function logStartupConfiguration() {
+  const frontendIndex = path.join(FRONTEND_DIST_DIR, 'index.html');
+  const landingPage = path.join(ROOT_DIR, 'landing-page.html');
+  console.log('[BOOT] Runtime configuration');
+  console.log(`[BOOT] PORT=${PORT} STORAGE_ROOT=${STORAGE_ROOT}`);
+  console.log(`[BOOT] BASE_DOMAIN=${BASE_DOMAIN || '(disabled)'}`);
+  console.log(`[BOOT] Supabase=${process.env.SUPABASE_URL ? 'enabled' : 'disabled'} Cloudinary=${process.env.CLOUDINARY_CLOUD_NAME ? 'enabled' : 'disabled'}`);
+  console.log(`[BOOT] Landing page=${fs.existsSync(landingPage) ? 'present' : 'missing'} Frontend dist=${fs.existsSync(frontendIndex) ? 'present' : 'missing'}`);
+  if (STORAGE_ROOT === ROOT_DIR && !process.env.SUPABASE_URL) {
+    console.warn('[BOOT] STORAGE_ROOT points to the app directory and Supabase is disabled. Source-zip deploys can overwrite local runtime data.');
+  }
 }
 
 async function ensureSupabaseAuthReady() {
@@ -407,6 +427,8 @@ app.use(session({
 }));
 app.use('/logos', express.static(LOGOS_DIR));
 app.use('/products', express.static(PRODUCTS_DIR));
+app.use(sameOriginGuard);
+app.use(subdomainMiddleware);
 
 app.use((req, res, next) => { return next(); });
 
@@ -415,10 +437,16 @@ app.get('/health', (req, res) => {
     ok: true,
     uptimeSec: Math.round(process.uptime()),
     db: getDBStatus(),
+    files: {
+      landingPage: fs.existsSync(path.join(ROOT_DIR, 'landing-page.html')),
+      frontendDist: fs.existsSync(path.join(FRONTEND_DIST_DIR, 'index.html'))
+    },
     env: {
       nodeEnv: process.env.NODE_ENV || 'development',
       baseDomain: process.env.BASE_DOMAIN || '',
-      cloudinaryFolder: process.env.CLOUDINARY_FOLDER || ''
+      storageRoot: STORAGE_ROOT,
+      cloudinaryFolder: process.env.CLOUDINARY_FOLDER || '',
+      superAdminConfigured: !!(process.env.SUPER_ADMIN_EMAIL && process.env.SUPER_ADMIN_PASSWORD)
     }
   });
 });
@@ -1967,6 +1995,9 @@ app.post('/api/superadmin/login', async (req, res) => {
     const email = String(req.body.email || '').trim().toLowerCase();
     const password = String(req.body.password || '');
     const db = await loadDB();
+    if (!db.superAdmin || !db.superAdmin.email || !db.superAdmin.passwordHash) {
+      return res.status(503).json({ success: false, error: 'Super admin is not configured on this server' });
+    }
     if (!db.superAdmin || email !== String(db.superAdmin.email || '').trim().toLowerCase()) {
       return res.status(401).json({ success: false, error: 'Invalid credentials' });
     }
@@ -2101,6 +2132,7 @@ app.use((req, res) => {
 // Error handler
 app.use((error, req, res, next) => {
   try {
+    console.error('[ERROR]', req.method, req.originalUrl, error && error.stack ? error.stack : error);
     const message = error && error.message ? error.message : 'Unexpected server error.';
     res.status(500).send(renderGlobalError('Server Error', message, 500));
   } catch (finalError) {
@@ -2112,6 +2144,7 @@ app.use((error, req, res, next) => {
   await ensureDatabaseReady();
   await migrateFromBlobToTables();
   await ensureSupabaseAuthReady();
+  logStartupConfiguration();
   app.listen(PORT, () => {
     console.log(`MyShopBuilder running on port ${PORT}`);
   });

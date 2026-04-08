@@ -6,6 +6,7 @@ const { ORDER_STATUSES, BASE_DOMAIN, DB_PATH } = config;
 function getStatusBadge(status) {
   const map = {
     pending: 'badge-pending',
+    'payment-review': 'badge-pending',
     confirmed: 'badge-confirmed',
     shipped: 'badge-live',
     cancelled: 'badge-cancelled',

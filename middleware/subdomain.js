@@ -52,7 +52,31 @@ function findStoreByRequestHost(db, req) {
 }
 
 function subdomainMiddleware(req, res, next) {
-  return next();
+  const host = normalizeHostValue((req && req.headers && req.headers['x-forwarded-host']) || (req && req.get && req.get('host')) || '');
+  if (!host) {
+    next();
+    return;
+  }
+  const safePath = String(req.path || req.url || '/').trim();
+  const platformPrefixes = ['/api', '/app', '/dashboard', '/superadmin', '/login', '/register', '/auth', '/health', '/migration-status', '/verify-email', '/forgot-password', '/reset-password', '/public', '/logos', '/products', '/store'];
+  if (platformPrefixes.some((prefix) => safePath === prefix || safePath.startsWith(`${prefix}/`))) {
+    next();
+    return;
+  }
+  loadDB().then((db) => {
+    const hostStore = findStoreByRequestHost(db, req);
+    if (!hostStore || !hostStore.slug) {
+      next();
+      return;
+    }
+    req.subdomainSlug = hostStore.slug;
+    req.storeHost = hostStore.host;
+    req.url = `/store/${encodeURIComponent(hostStore.slug)}${safePath === '/' ? '' : safePath}${req.url.includes('?') ? req.url.slice(req.url.indexOf('?')) : ''}`;
+    next();
+  }).catch((error) => {
+    console.error('[SUBDOMAIN] Rewrite failed.', error && error.message ? error.message : error);
+    next();
+  });
 }
 
 module.exports = { getSubdomainFromHost, normalizeHostValue, findStoreByRequestHost, subdomainMiddleware };

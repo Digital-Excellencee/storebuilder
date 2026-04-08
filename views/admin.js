@@ -170,6 +170,9 @@ function renderAdminLayout(req, title, activeKey, content, extraStylesOverride) 
       ${links.map((item) => {
         const active = activeKey === item.key ? 'active' : '';
         const target = item.key === 'store' ? ' target="_blank" rel="noopener noreferrer"' : '';
+        if (item.key === 'logout') {
+          return `<form method="POST" action="/logout" style="margin:0;"><button class="nav-link ${active}" type="submit" style="width:100%;border:0;background:transparent;"><span class="nav-icon">${escapeHtml(item.icon || '•')}</span><span class="nav-label">${escapeHtml(item.label)}</span></button></form>`;
+        }
         return `<a class="nav-link ${active}" href="${escapeHtml(item.href)}"${target}><span class="nav-icon">${escapeHtml(item.icon || '•')}</span><span class="nav-label">${escapeHtml(item.label)}</span>${item.key === 'orders' && pendingOrderCount > 0 ? `<span class="nav-badge">${escapeHtml(String(pendingOrderCount))}</span>` : ''}</a>`;
       }).join('')}
     </div>
@@ -187,7 +190,7 @@ function renderAdminLayout(req, title, activeKey, content, extraStylesOverride) 
     </div>
   </div>
   <div class="topbar-actions">
-    ${isSuperAdminImpersonating ? '<a class="btn btn-danger" href="/superadmin/return-from-vendor" style="background:#dc2626;color:#fff;border-color:#dc2626;">← Return to Super Admin</a>' : '<span class="topbar-pill"><span class="topbar-dot"></span> Live store</span>'}
+    ${isSuperAdminImpersonating ? '<form method="POST" action="/superadmin/return-from-vendor" style="margin:0;"><button class="btn btn-danger" type="submit" style="background:#dc2626;color:#fff;border-color:#dc2626;">← Return to Super Admin</button></form>' : '<span class="topbar-pill"><span class="topbar-dot"></span> Live store</span>'}
     <a class="btn btn-secondary" href="/dashboard/analytics">Purge Cache</a>
     <a class="btn btn-secondary" href="/store/${escapeHtml(store.slug)}" target="_blank" rel="noopener noreferrer">View store</a>
   </div>
@@ -509,6 +512,9 @@ function renderSuperAdminLayout(req, title, activeKey, content) {
   ];
   const sidebar = items.map((item) => {
     const active = activeKey === item.key ? 'active' : '';
+    if (item.key === 'logout') {
+      return `<form method="POST" action="/superadmin/logout" style="margin:0;"><button class="nav-link ${active}" type="submit" style="width:100%;border:0;background:transparent;"><span class="nav-icon">${escapeHtml(item.icon)}</span><span class="nav-label">${escapeHtml(item.label)}</span></button></form>`;
+    }
     return `<a class="nav-link ${active}" href="${escapeHtml(item.href)}"><span class="nav-icon">${escapeHtml(item.icon)}</span><span class="nav-label">${escapeHtml(item.label)}</span></a>`;
   }).join('');
   return renderHtmlShell(title, `
@@ -527,7 +533,7 @@ function renderSuperAdminLayout(req, title, activeKey, content) {
   <a href="/superadmin/vendors"${activeKey === 'vendors' ? ' class="active"' : ''}><svg class="nav-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg><span>Vendors</span></a>
   <a href="/superadmin/stores"${activeKey === 'stores' ? ' class="active"' : ''}><svg class="nav-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg><span>Stores</span></a>
   <a href="/superadmin/users"${activeKey === 'users' ? ' class="active"' : ''}><svg class="nav-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg><span>Users</span></a>
-  <a href="/superadmin/logout"><svg class="nav-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg><span>Logout</span></a>
+  <form method="POST" action="/superadmin/logout" style="margin:0;"><button type="submit" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;padding:8px 0;min-width:60px;color:#94a3b8;font-size:10px;font-weight:600;border-radius:12px;border:0;background:transparent;"><svg class="nav-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg><span>Logout</span></button></form>
 </nav>`, { extraStyles: adminStyles });
 }
 

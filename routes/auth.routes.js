@@ -15,6 +15,7 @@ const { renderHtmlShell } = require('../views/shell');
 const { route } = require('../middleware/error');
 const { upload } = require('../middleware/upload');
 const { findStoreByRequestHost } = require('../middleware/subdomain');
+const { isTrustedNavigation } = require('../middleware/request-security');
 const config = require('../config');
 
 const { BASE_DOMAIN } = config;
@@ -437,7 +438,12 @@ router.post('/login', route(async (req, res) => {
   }
 }));
 
-router.get('/logout', route(async (req, res) => {
+async function handleVendorLogout(req, res) {
+  if (!isTrustedNavigation(req)) {
+    setFlash(req, 'error', 'Security validation failed. Please try again from inside the dashboard.');
+    res.redirect('/dashboard');
+    return;
+  }
   try {
     const wasFromSuperAdmin = req.session.fromSuperAdmin;
     if (wasFromSuperAdmin) {
@@ -456,7 +462,10 @@ router.get('/logout', route(async (req, res) => {
   } catch (error) {
     res.redirect('/login');
   }
-}));
+}
+
+router.get('/logout', route(handleVendorLogout));
+router.post('/logout', route(handleVendorLogout));
 
 router.get('/forgot-password', route(async (req, res) => {
   const flash = renderFlashMessages(req);
@@ -492,7 +501,6 @@ router.post('/forgot-password', route(async (req, res) => {
       user.resetExpiry = expiry;
       await saveDB(db);
       const resetLink = `${process.env.BASE_URL || `${req.protocol}://${req.get('host')}`}/reset-password/${token}`;
-      console.log(`[PASSWORD RESET] ${email} -> ${resetLink}`);
       await sendPasswordResetEmail(email, resetLink);
     }
     setFlash(req, 'success', 'If that email exists, a reset link has been generated.');

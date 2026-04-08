@@ -42,7 +42,7 @@ const config = {
   LOGOS_DIR: process.env.LOGOS_DIR ? path.resolve(process.env.LOGOS_DIR) : path.join(process.env.PUBLIC_DIR ? path.resolve(process.env.PUBLIC_DIR) : path.join(STORAGE_ROOT, 'public'), 'logos'),
   PRODUCTS_DIR: process.env.PRODUCTS_DIR ? path.resolve(process.env.PRODUCTS_DIR) : path.join(STORAGE_ROOT, 'products'),
   ALLOWED_MIMES: ['image/jpeg', 'image/png', 'image/webp', 'image/gif'],
-  ORDER_STATUSES: ['pending', 'confirmed', 'shipped', 'cancelled', 'delivered'],
+  ORDER_STATUSES: ['pending', 'payment-review', 'confirmed', 'shipped', 'cancelled', 'delivered'],
   BASE_DOMAIN: (process.env.BASE_DOMAIN || '').toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*$/, ''),
   IGNORED_SUBDOMAINS: ['www', 'mail', 'ftp', 'api', 'admin', 'cdn', 'static', 'assets'],
   CLOUDFLARE_API_TOKEN: process.env.CLOUDFLARE_API_TOKEN || '',

@@ -9,7 +9,7 @@ const { validateEmail } = require('../helpers/validation');
 const { setFlash, renderFlashMessages } = require('../helpers/flash');
 const { getStatusBadge, getTemplateById, applyRoundingMode, getEffectiveShippingFee, getProductDisplayRating } = require('../helpers/store');
 const { renderStoreCss, getThemeCSS } = require('../views/store-css');
-const { renderStoreByTheme, renderAppProductPage } = require('../views/store-themes');
+const { renderStoreByTheme, renderAppProductPage, renderAppShopAllPage, renderAppCategoriesPage } = require('../views/store-themes');
 const { renderGlobalError } = require('../views/error-views');
 const { renderHtmlShell } = require('../views/shell');
 const { getStoreMetaTags, getRobotsTxt, resolveStoreRedirect } = require('../views/store-components');
@@ -22,6 +22,13 @@ const { sendFast2SmsOtp } = require('../services/sms');
 const { createShiprocketOrder } = require('../services/shiprocket');
 const { triggerOrderCreatedWebhooks } = require('../services/webhooks');
 const { getRazorpayConfig, createRazorpayOrder, verifyRazorpaySignature } = require('../services/razorpay');
+const { isTrustedNavigation } = require('../middleware/request-security');
+
+const OTP_REQUEST_WINDOW_MS = 15 * 60 * 1000;
+const OTP_REQUEST_LIMIT = 5;
+const OTP_RESEND_COOLDOWN_MS = 60 * 1000;
+const OTP_VERIFY_LIMIT = 5;
+const otpRequestBuckets = new Map();
 
 function buildTawkScript(store) {
   const app = store && store.apps && store.apps.tawkto;
@@ -181,6 +188,67 @@ function clearCustomerOtpSession(req) {
   if (req.session) delete req.session.customerOtp;
 }
 
+function getOtpBucketKey(slug, phone, req) {
+  return `${String(slug || '').trim()}:${sanitizePhone(phone || '')}:${String((req && (req.headers['x-forwarded-for'] || req.ip)) || '').split(',')[0].trim()}`;
+}
+
+function consumeOtpQuota(slug, phone, req) {
+  const key = getOtpBucketKey(slug, phone, req);
+  const now = Date.now();
+  const bucket = otpRequestBuckets.get(key) || { sentAt: [] };
+  bucket.sentAt = bucket.sentAt.filter((stamp) => now - stamp < OTP_REQUEST_WINDOW_MS);
+  if (bucket.lastSentAt && (now - bucket.lastSentAt) < OTP_RESEND_COOLDOWN_MS) {
+    return { ok: false, reason: 'cooldown', retryAfterSec: Math.ceil((OTP_RESEND_COOLDOWN_MS - (now - bucket.lastSentAt)) / 1000) };
+  }
+  if (bucket.sentAt.length >= OTP_REQUEST_LIMIT) {
+    return { ok: false, reason: 'limit', retryAfterSec: Math.ceil((OTP_REQUEST_WINDOW_MS - (now - bucket.sentAt[0])) / 1000) };
+  }
+  bucket.sentAt.push(now);
+  bucket.lastSentAt = now;
+  otpRequestBuckets.set(key, bucket);
+  return { ok: true };
+}
+
+function ensureLineItemsInStock(store, lineItems) {
+  const products = Array.isArray(store && store.products) ? store.products : [];
+  for (const item of Array.isArray(lineItems) ? lineItems : []) {
+    const product = products.find((entry) => entry.id === item.product.id);
+    const variantState = product ? resolveVariantSelectionState(product, item.variantSelections || {}) : null;
+    const available = Math.max(0, Number((variantState && variantState.stock) || (product && product.stock) || 0));
+    const required = Math.max(1, Number(item && item.quantity || 1));
+    if (!product || required > available) {
+      return { ok: false, productName: item && item.product && item.product.name ? item.product.name : 'Product' };
+    }
+  }
+  return { ok: true };
+}
+
+function adjustOrderInventory(store, order, direction) {
+  const delta = direction === 'restore' ? 1 : -1;
+  let changed = false;
+  (Array.isArray(order && order.items) ? order.items : []).forEach((item) => {
+    const product = Array.isArray(store && store.products) ? store.products.find((entry) => entry.id === item.productId) : null;
+    if (!product) return;
+    const quantity = Math.max(1, Number(item.quantity || 1));
+    const currentStock = Math.max(0, Number(product.stock || 0));
+    product.stock = Math.max(0, currentStock + (delta * quantity));
+    (Array.isArray(product.variants) ? product.variants : []).forEach((variant) => {
+      const selectedLabel = item.variantSelections && item.variantSelections[variant.id];
+      if (!selectedLabel) return;
+      const option = (Array.isArray(variant.options) ? variant.options : []).find((entry) => entry.label === selectedLabel);
+      if (!option || option.stock === undefined || option.stock === null || option.stock === '') return;
+      option.stock = Math.max(0, Number(option.stock || 0) + (delta * quantity));
+    });
+    changed = true;
+  });
+  if (changed) {
+    order.stockDeducted = direction !== 'restore';
+    order.stockDeductedAt = direction !== 'restore' ? new Date().toISOString() : '';
+    order.stockRestoredAt = direction === 'restore' ? new Date().toISOString() : '';
+  }
+  return changed;
+}
+
 // URL redirect middleware
 router.use('/:slug', route(async (req, res, next) => {
   const slug = String(req.params.slug || '').trim();
@@ -337,7 +405,87 @@ router.get('/:slug', route(async (req, res) => {
   const sortOptions = `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px;"><form method="GET" action="${storeBase || '/'}" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">${search ? `<input type="hidden" name="search" value="${escapeHtml(search)}">` : ''}${selectedCategory ? `<input type="hidden" name="category" value="${escapeHtml(selectedCategory)}">` : ''}<select name="sort" onchange="this.form.submit()" style="padding:8px 12px;border-radius:999px;border:1px solid #e2e8f0;font-size:13px;"><option value="">Sort by</option><option value="newest"${sort === 'newest' ? ' selected' : ''}>Newest First</option><option value="price_asc"${sort === 'price_asc' ? ' selected' : ''}>Price: Low to High</option><option value="price_desc"${sort === 'price_desc' ? ' selected' : ''}>Price: High to Low</option></select></form></div>`;
   const paginationHtml = totalPages > 1 ? `<div style="display:flex;gap:8px;justify-content:center;padding:20px 0;flex-wrap:wrap;">${Array.from({ length: totalPages }, (_, i) => `<a href="${storeBase || '/'}?page=${i + 1}${search ? '&search=' + encodeURIComponent(search) : ''}${selectedCategory ? '&category=' + encodeURIComponent(selectedCategory) : ''}${sort ? '&sort=' + encodeURIComponent(sort) : ''}" style="padding:8px 14px;border-radius:999px;background:${page === i + 1 ? (cfg.primaryColor || '#3b5bfd') : '#fff'};color:${page === i + 1 ? '#fff' : '#333'};border:1px solid #e2e8f0;font-size:13px;font-weight:700;text-decoration:none;">${i + 1}</a>`).join('')}</div>` : '';
   const storeContent = renderStoreByTheme(currentTemplate, store, slug, { products: pagedProducts, categories, cartCount, wishlistCount, wishlist, search, selectedCategory, currentTemplate, customer, cfg, isDark, sortOptions, paginationHtml, isSubdomain, storeBase, req, cartDetails, wishlistItems, featuredProduct: visibleProducts[0] || store.products.find((item) => item.active !== false) });
-  res.send(renderHtmlShell(`${store.name} - Store`, `<div class="store-page"><div class="store-wrap">${storeContent}</div></div>`, getStoreShellOptions(req, store, { extraStyles: themeCSS, metaTags: getStoreMetaTags(store, { title: ss.seoSettings.title || `${store.name} - Store`, description: ss.seoSettings.description || store.description }) })));
+  res.send(renderHtmlShell(`${store.name} - Store`, `<div class="store-page"><div class="store-wrap">${storeContent}</div></div>`, getStoreShellOptions(req, store, { extraStyles: themeCSS, metaTags: getStoreMetaTags(store, { title: ss.seoSettings.title || `${store.name} - Store`, description: ss.seoSettings.description || store.description }) }))); 
+}));
+
+router.get('/:slug/shop', route(async (req, res) => {
+  const db = await loadDB();
+  const slug = String(req.params.slug || '').trim();
+  const store = db.stores[slug];
+  if (!store) { res.status(404).send(renderGlobalError('Store Not Found', 'The storefront you are looking for does not exist.', 404)); return; }
+  recordStoreVisit(slug);
+  const currentTemplate = getTemplateById(db, store.template);
+  const ss = ensureStoreSettings(store);
+  const cfg = store.themeConfig || {};
+  const cart = getStoreCart(req, slug);
+  const wishlist = getStoreWishlist(req, slug);
+  const search = String(req.query.search || '').trim().toLowerCase();
+  const selectedCategory = String(req.query.category || '').trim();
+  const sort = String(req.query.sort || '').trim();
+  const page = Math.max(1, parseInt(req.query.page || 1, 10));
+  const perPage = 24;
+  const categories = Array.isArray(store.categories) ? store.categories : [];
+  let visibleProducts = store.products.filter((product) => {
+    if (product.active === false) return false;
+    if (ss.productSettings.hideOutOfStock && Number(product.stock || 0) <= 0) return false;
+    const searchable = [product.name, product.description, product.sku, product.category, String(product.price || ''), String(product.comparePrice || '')].join(' ').toLowerCase();
+    const matchesSearch = !search || searchable.includes(search);
+    const matchesCategory = !selectedCategory || selectedCategory === 'all' || String(product.category || '').trim() === selectedCategory || categories.some((category) => category.name === selectedCategory && (category.productIds || []).includes(product.id));
+    return matchesSearch && matchesCategory;
+  });
+  if (sort === 'price_asc') visibleProducts.sort((a, b) => parsePrice(a.price) - parsePrice(b.price));
+  else if (sort === 'price_desc') visibleProducts.sort((a, b) => parsePrice(b.price) - parsePrice(a.price));
+  else if (sort === 'newest') visibleProducts.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  const totalPages = Math.ceil(visibleProducts.length / perPage);
+  const pagedProducts = visibleProducts.slice((page - 1) * perPage, page * perPage);
+  const cartDetails = getCartDetails(store, cart);
+  const wishlistItems = wishlist.map((productId) => store.products.find((product) => product.id === productId)).filter(Boolean);
+  const cartCount = cart.reduce((sum, item) => sum + Number(item.quantity || 1), 0);
+  const wishlistCount = wishlist.length;
+  const customer = await getLoggedCustomer(req, slug);
+  const isDark = store.theme === 'dark';
+  const themeCSS = getThemeCSS(currentTemplate, store.theme, cfg);
+  const isSubdomain = !!(req.subdomainSlug);
+  const storeBase = isSubdomain ? '' : '/store/' + encodeURIComponent(slug);
+  const sortOptions = `<div class="app-shop-toolbar"><form method="GET" action="${storeBase}/shop" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">${search ? `<input type="hidden" name="search" value="${escapeHtml(search)}">` : ''}${selectedCategory ? `<input type="hidden" name="category" value="${escapeHtml(selectedCategory)}">` : ''}<select name="sort" onchange="this.form.submit()" style="padding:10px 14px;border-radius:999px;border:1px solid #e2e8f0;font-size:13px;background:#fff;"><option value="">Sort by</option><option value="newest"${sort === 'newest' ? ' selected' : ''}>Newest First</option><option value="price_asc"${sort === 'price_asc' ? ' selected' : ''}>Price: Low to High</option><option value="price_desc"${sort === 'price_desc' ? ' selected' : ''}>Price: High to Low</option></select></form></div>`;
+  const paginationBase = `${storeBase}/shop`;
+  const paginationHtml = totalPages > 1 ? `<div style="display:flex;gap:8px;justify-content:center;padding:20px 0;flex-wrap:wrap;">${Array.from({ length: totalPages }, (_, i) => `<a href="${paginationBase}?page=${i + 1}${search ? '&search=' + encodeURIComponent(search) : ''}${selectedCategory ? '&category=' + encodeURIComponent(selectedCategory) : ''}${sort ? '&sort=' + encodeURIComponent(sort) : ''}" style="padding:8px 14px;border-radius:999px;background:${page === i + 1 ? (cfg.primaryColor || '#3b5bfd') : '#fff'};color:${page === i + 1 ? '#fff' : '#333'};border:1px solid #e2e8f0;font-size:13px;font-weight:700;text-decoration:none;">${i + 1}</a>`).join('')}</div>` : '';
+  if ((currentTemplate && currentTemplate.layout) === 'app') {
+    const storeContent = renderAppShopAllPage(store, slug, { products: pagedProducts, cartCount, wishlistCount, wishlist, search, customer, cfg, paginationHtml, storeBase, cartDetails, wishlistItems, labels: ss.labelSettings, totalProducts: visibleProducts.length });
+    res.send(renderHtmlShell(`${store.name} - Shop All`, `<div class="store-page"><div class="store-wrap">${storeContent}</div></div>`, getStoreShellOptions(req, store, { extraStyles: themeCSS, metaTags: getStoreMetaTags(store, { title: `${store.name} - Shop All`, description: ss.seoSettings.description || store.description }) })));
+    return;
+  }
+  res.redirect(`/store/${encodeURIComponent(slug)}${search ? `?search=${encodeURIComponent(search)}` : '?category=all'}`);
+}));
+
+router.get('/:slug/categories', route(async (req, res) => {
+  const db = await loadDB();
+  const slug = String(req.params.slug || '').trim();
+  const store = db.stores[slug];
+  if (!store) { res.status(404).send(renderGlobalError('Store Not Found', 'The storefront you are looking for does not exist.', 404)); return; }
+  recordStoreVisit(slug);
+  const currentTemplate = getTemplateById(db, store.template);
+  const ss = ensureStoreSettings(store);
+  const cfg = store.themeConfig || {};
+  const cart = getStoreCart(req, slug);
+  const wishlist = getStoreWishlist(req, slug);
+  const search = String(req.query.search || '').trim();
+  const categories = Array.isArray(store.categories) ? store.categories : [];
+  const visibleProducts = store.products.filter((product) => product.active !== false);
+  const cartDetails = getCartDetails(store, cart);
+  const wishlistItems = wishlist.map((productId) => store.products.find((product) => product.id === productId)).filter(Boolean);
+  const cartCount = cart.reduce((sum, item) => sum + Number(item.quantity || 1), 0);
+  const wishlistCount = wishlist.length;
+  const customer = await getLoggedCustomer(req, slug);
+  const themeCSS = getThemeCSS(currentTemplate, store.theme, cfg);
+  const isSubdomain = !!(req.subdomainSlug);
+  const storeBase = isSubdomain ? '' : '/store/' + encodeURIComponent(slug);
+  if ((currentTemplate && currentTemplate.layout) === 'app') {
+    const storeContent = renderAppCategoriesPage(store, slug, { categories, products: visibleProducts, cartCount, wishlistCount, wishlist, search, customer, cfg, storeBase, cartDetails, wishlistItems, labels: ss.labelSettings });
+    res.send(renderHtmlShell(`${store.name} - Categories`, `<div class="store-page"><div class="store-wrap">${storeContent}</div></div>`, getStoreShellOptions(req, store, { extraStyles: themeCSS, metaTags: getStoreMetaTags(store, { title: `${store.name} - Categories`, description: ss.seoSettings.description || store.description }) })));
+    return;
+  }
+  res.redirect(`/store/${encodeURIComponent(slug)}?category=all`);
 }));
 
 // Product page, cart, checkout, wishlist, orders, account routes...
@@ -828,6 +976,12 @@ router.post('/:slug/checkout', route(async (req, res) => {
       res.redirect(`/store/${encodeURIComponent(slug)}/checkout?mode=${encodeURIComponent(checkoutMode)}&step=payment`);
       return;
     }
+    const stockCheck = ensureLineItemsInStock(store, lineItems);
+    if (!stockCheck.ok) {
+      setFlash(req, 'error', `${stockCheck.productName} is no longer available in the requested quantity.`);
+      res.redirect(`/store/${encodeURIComponent(slug)}/cart`);
+      return;
+    }
     const shippingFee = getEffectiveShippingFee(store, subtotal);
     const taxRate = store.taxSettings && store.taxSettings.enabled ? Number(store.taxSettings.rate || 0) : 0;
     const taxAmount = store.taxSettings && store.taxSettings.enabled ? subtotal * (taxRate / 100) : 0;
@@ -845,7 +999,7 @@ router.post('/:slug/checkout', route(async (req, res) => {
       trackingCode,
       productId: lineItems[0].product.id,
       productName: lineItems.map((item) => item.product.name).join(', '),
-      items: lineItems.map((item) => ({ productId: item.product.id, name: item.product.name, price: item.price != null ? item.price : item.product.price, quantity: item.quantity, variantSummary: item.variantSummary || '', sku: item.sku || item.product.sku || '' })),
+      items: lineItems.map((item) => ({ productId: item.product.id, name: item.product.name, price: item.price != null ? item.price : item.product.price, quantity: item.quantity, variantSelections: item.variantSelections || {}, variantSummary: item.variantSummary || '', sku: item.sku || item.product.sku || '' })),
       customerName: name,
       customerPhone: phone,
       customerEmail: email,
@@ -900,14 +1054,8 @@ router.post('/:slug/checkout', route(async (req, res) => {
     if (!customer.addresses.includes(draft.shippingAddress)) {
       customer.addresses.unshift(draft.shippingAddress);
     }
-    // Only mutate persisted store state after payment bootstrap succeeds.
-    if (Array.isArray(lineItems)) {
-      lineItems.forEach((item) => {
-        const product = store.products.find((p) => p.id === item.product.id);
-        if (product) {
-          product.stock = Math.max(0, (parseInt(product.stock, 10) || 0) - (parseInt(item.quantity, 10) || 1));
-        }
-      });
+    if (paymentMethod !== 'online') {
+      adjustOrderInventory(store, order, 'deduct');
     }
     store.abandonedCarts = (Array.isArray(store.abandonedCarts) ? store.abandonedCarts : []).filter((entry) => entry.sessionId !== req.sessionID);
     await saveDB(db);
@@ -1049,12 +1197,32 @@ router.post('/:slug/order/:code/razorpay/verify', route(async (req, res) => {
     if (!store) { res.status(404).send(renderGlobalError('Store Not Found', 'The storefront you are looking for does not exist.', 404)); return; }
     const order = store.orders.find((item) => item.trackingCode === req.params.code || item.orderNumber === req.params.code || item.id === req.params.code);
     if (!order) { res.status(404).send(renderGlobalError('Order Not Found', 'The order you are looking for does not exist.', 404)); return; }
+    if (order.paymentVerifiedAt && order.status === 'confirmed') {
+      setFlash(req, 'success', 'Payment was already verified for this order.');
+      res.redirect(`/store/${encodeURIComponent(slug)}/order/${encodeURIComponent(order.trackingCode)}`);
+      return;
+    }
     const valid = verifyRazorpaySignature(store, req.body.razorpay_order_id, req.body.razorpay_payment_id, req.body.razorpay_signature);
-      if (!valid) {
+    if (!valid) {
       if (order.customerEmail) sendPaymentFailureEmail(order, store).catch(console.error);
       setFlash(req, 'error', 'Payment verification failed.');
       res.redirect(`/store/${encodeURIComponent(slug)}/order/${encodeURIComponent(order.trackingCode)}`);
       return;
+    }
+    if (!order.stockDeducted) {
+      const availability = ensureLineItemsInStock(store, (order.items || []).map((item) => ({ product: { id: item.productId, name: item.name }, quantity: item.quantity, variantSelections: item.variantSelections || {} })));
+      if (!availability.ok) {
+        order.status = 'payment-review';
+        order.paymentVerifiedAt = new Date().toISOString();
+        order.paymentReviewReason = 'insufficient_stock_after_payment';
+        order.trackingHistory = Array.isArray(order.trackingHistory) ? order.trackingHistory : [];
+        order.trackingHistory.push({ status: 'payment-review', at: order.paymentVerifiedAt });
+        await saveDB(db);
+        setFlash(req, 'info', 'Payment received. Your order is under manual review because stock changed before payment confirmation.');
+        res.redirect(`/store/${encodeURIComponent(slug)}/order/${encodeURIComponent(order.trackingCode)}`);
+        return;
+      }
+      adjustOrderInventory(store, order, 'deduct');
     }
     order.paymentVerifiedAt = new Date().toISOString();
     order.razorpayPaymentId = String(req.body.razorpay_payment_id || '').trim();
@@ -1165,6 +1333,9 @@ router.post('/:slug/order/:code/cancel', route(async (req, res) => {
     order.status = 'cancelled';
     order.trackingHistory = Array.isArray(order.trackingHistory) ? order.trackingHistory : [];
     order.trackingHistory.push({ status: 'cancelled', at: new Date().toISOString() });
+    if (order.stockDeducted) {
+      adjustOrderInventory(store, order, 'restore');
+    }
     await saveDB(db);
     setFlash(req, 'success', 'Order cancelled successfully.');
     res.redirect(`/store/${encodeURIComponent(slug)}/order/${encodeURIComponent(req.params.code)}`);
@@ -1321,6 +1492,15 @@ router.post('/:slug/account/request-otp', route(async (req, res) => {
       res.redirect(`/store/${encodeURIComponent(slug)}/account/${mode === 'register' ? 'register' : 'login'}`);
       return;
     }
+    const quota = consumeOtpQuota(slug, phone, req);
+    if (!quota.ok) {
+      const message = quota.reason === 'cooldown'
+        ? `Please wait ${quota.retryAfterSec} seconds before requesting another OTP.`
+        : `Too many OTP requests. Try again in ${quota.retryAfterSec} seconds.`;
+      setFlash(req, 'error', message);
+      res.redirect(`/store/${encodeURIComponent(slug)}/account/${mode === 'register' ? 'register' : 'login'}`);
+      return;
+    }
     if (email && !validateEmail(email)) {
       setFlash(req, 'error', 'Enter a valid email address.');
       res.redirect(`/store/${encodeURIComponent(slug)}/account/${mode === 'register' ? 'register' : 'login'}`);
@@ -1340,6 +1520,7 @@ router.post('/:slug/account/request-otp', route(async (req, res) => {
       email,
       mode,
       otp,
+      attempts: 0,
       expiresAt: Date.now() + ((Number(otpApp.expiryMinutes || 10) || 10) * 60 * 1000)
     });
     setFlash(req, 'success', `OTP sent to ${phone}.`);
@@ -1375,6 +1556,16 @@ router.post('/:slug/account/verify-otp', route(async (req, res) => {
     const otpSession = getCustomerOtpSession(req);
     const otp = String(req.body.otp || '').trim();
     if (!otpSession || otpSession.slug !== slug || Number(otpSession.expiresAt || 0) < Date.now() || otp !== String(otpSession.otp || '')) {
+      if (otpSession && otpSession.slug === slug) {
+        otpSession.attempts = Math.max(0, Number(otpSession.attempts || 0)) + 1;
+        setCustomerOtpSession(req, otpSession);
+        if (otpSession.attempts >= OTP_VERIFY_LIMIT) {
+          clearCustomerOtpSession(req);
+          setFlash(req, 'error', 'Too many invalid OTP attempts. Request a fresh OTP.');
+          res.redirect(`/store/${encodeURIComponent(slug)}/account/login`);
+          return;
+        }
+      }
       setFlash(req, 'error', 'OTP is invalid or expired.');
       res.redirect(`/store/${encodeURIComponent(slug)}/account/verify-otp`);
       return;
@@ -1410,7 +1601,12 @@ router.post('/:slug/account/verify-otp', route(async (req, res) => {
   }
 }));
 
-router.get('/:slug/account/logout', route(async (req, res) => {
+async function handleCustomerLogout(req, res) {
+  if (!isTrustedNavigation(req)) {
+    setFlash(req, 'error', 'Security validation failed. Please try again from inside the store.');
+    res.redirect(`/store/${encodeURIComponent(req.params.slug)}/account`);
+    return;
+  }
   try {
     clearLoggedCustomer(req);
     clearCustomerOtpSession(req);
@@ -1418,7 +1614,10 @@ router.get('/:slug/account/logout', route(async (req, res) => {
   } catch (error) {
     res.redirect(`/store/${encodeURIComponent(req.params.slug)}`);
   }
-}));
+}
+
+router.get('/:slug/account/logout', route(handleCustomerLogout));
+router.post('/:slug/account/logout', route(handleCustomerLogout));
 
 router.get('/:slug/account', route(async (req, res) => {
   const db = await loadDB();
@@ -1432,7 +1631,7 @@ router.get('/:slug/account', route(async (req, res) => {
   const orders = store.orders.filter((order) => order.customerEmail === customer.email).slice().reverse();
   res.send(renderHtmlShell(`${store.name} - Account`, `
     <div class="store-page"><div class="store-wrap account-page">
-      <div class="store-nav"><a href="/store/${encodeURIComponent(slug)}">Home</a><a href="/store/${encodeURIComponent(slug)}/account/orders">Orders</a><a href="/store/${encodeURIComponent(slug)}/account/wishlist">Wishlist</a><a href="/store/${encodeURIComponent(slug)}/account/logout">Logout</a></div>
+      <div class="store-nav"><a href="/store/${encodeURIComponent(slug)}">Home</a><a href="/store/${encodeURIComponent(slug)}/account/orders">Orders</a><a href="/store/${encodeURIComponent(slug)}/account/wishlist">Wishlist</a><form method="POST" action="/store/${encodeURIComponent(slug)}/account/logout" style="display:inline;"><button class="btn btn-secondary" type="submit" style="min-height:auto;padding:8px 12px;">Logout</button></form></div>
       <section class="card panel">
         <div class="title-row"><div><h1 class="page-title">My Account</h1><p class="page-subtitle">${escapeHtml(customer.name)}</p></div></div>
         <div class="kpi-list"><div class="kpi-item"><strong>Email</strong><span>${escapeHtml(visibleEmail)}</span></div><div class="kpi-item"><strong>Phone</strong><span>${escapeHtml(customer.phone)}</span></div><div class="kpi-item"><strong>Orders</strong><span>${escapeHtml(String(orders.length))}</span></div></div>

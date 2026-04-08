@@ -10,7 +10,17 @@ const { renderHtmlShell } = require('../views/shell');
 const { renderGlobalError } = require('../views/error-views');
 const { requireSuperAdmin } = require('../middleware/auth');
 const { route } = require('../middleware/error');
+const { isTrustedNavigation } = require('../middleware/request-security');
+const { writeAuditLog } = require('../services/audit');
 const { renderSuperAdminLayout } = require('../views/admin');
+
+function renderPostAction(action, label, className, extraStyle) {
+  return `<form method="POST" action="${escapeHtml(action)}" style="margin:0;display:inline;"><button class="${escapeHtml(className || 'btn')}" type="submit"${extraStyle ? ` style="${escapeHtml(extraStyle)}"` : ''}>${escapeHtml(label)}</button></form>`;
+}
+
+function renderVendorLoginAction(userId, label, className, extraStyle) {
+  return renderPostAction(`/superadmin/login-as-vendor/${encodeURIComponent(userId)}`, label || 'Login', className || 'btn', extraStyle);
+}
 
 router.get('/superadmin', route(async (req, res) => {
   if (req.session.superAdminId === 'superadmin') {
@@ -31,11 +41,13 @@ router.post('/superadmin/login', route(async (req, res) => {
     if (!password) { setFlash(req, 'error', 'Password is required.'); res.redirect('/superadmin'); return; }
     const db = await loadDB();
     const superAdmin = db && db.superAdmin ? db.superAdmin : null;
-    if (!superAdmin || email !== String(superAdmin.email || '').trim().toLowerCase()) { setFlash(req, 'error', 'Invalid super admin credentials.'); res.redirect('/superadmin'); return; }
+    if (!superAdmin || !superAdmin.email || !superAdmin.passwordHash) { setFlash(req, 'error', 'Super admin is not configured on this server.'); res.redirect('/superadmin'); return; }
+    if (email !== String(superAdmin.email || '').trim().toLowerCase()) { setFlash(req, 'error', 'Invalid super admin credentials.'); res.redirect('/superadmin'); return; }
     const valid = verifyPassword(password, db.superAdmin.passwordHash);
     if (!valid) { setFlash(req, 'error', 'Invalid super admin credentials.'); res.redirect('/superadmin'); return; }
     req.session.superAdminId = 'superadmin';
     req.session.cookie.maxAge = 30 * 24 * 60 * 60 * 1000;
+    writeAuditLog(req, 'superadmin.login', { email });
     setFlash(req, 'success', 'Super admin login successful.');
     res.redirect('/superadmin/dashboard');
   } catch (error) {
@@ -78,7 +90,7 @@ router.post('/superadmin/migrate-subdomains', requireSuperAdmin, route(async (re
 router.get('/superadmin/stores', requireSuperAdmin, route(async (req, res) => {
   const db = req.db;
   const stores = [...Object.values(db.stores)].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-  const html = stores.length ? `<div class="table-wrap"><table><thead><tr><th>Store</th><th>Slug</th><th>Owner</th><th>Products</th><th>Orders</th><th>Revenue</th><th>Created</th><th>Actions</th></tr></thead><tbody>${stores.map((store) => { const owner = getStoreOwner(db, store); const revenue = (store.orders || []).reduce((sum, o) => sum + (Number(o.amount) || 0), 0); return `<tr><td><a href="/superadmin/store/${encodeURIComponent(store.slug)}">${escapeHtml(store.name)}</a></td><td>${escapeHtml(store.slug)}</td><td>${escapeHtml(owner ? owner.email : '-')}</td><td>${escapeHtml(String(store.products.length))}</td><td>${escapeHtml(String(store.orders.length))}</td><td>${escapeHtml(formatMoney(revenue))}</td><td>${escapeHtml(formatDate(store.createdAt))}</td><td><div class="actions"><a class="btn btn-secondary" href="/store/${encodeURIComponent(store.slug)}" target="_blank" rel="noopener noreferrer">View</a><a class="btn btn-secondary" href="/superadmin/store/${encodeURIComponent(store.slug)}">Manage</a>${owner ? `<a class="btn" href="/superadmin/login-as-vendor/${encodeURIComponent(owner.id)}">Login</a>` : ''}<form method="POST" action="/superadmin/store/${encodeURIComponent(store.slug)}/delete" onsubmit="return confirm('Delete this store and owner account?');"><button class="btn btn-danger" type="submit">Delete</button></form></div></td></tr>`; }).join('')}</tbody></table></div>` : '<div class="empty">No stores found.</div>';
+  const html = stores.length ? `<div class="table-wrap"><table><thead><tr><th>Store</th><th>Slug</th><th>Owner</th><th>Products</th><th>Orders</th><th>Revenue</th><th>Created</th><th>Actions</th></tr></thead><tbody>${stores.map((store) => { const owner = getStoreOwner(db, store); const revenue = (store.orders || []).reduce((sum, o) => sum + (Number(o.amount) || 0), 0); return `<tr><td><a href="/superadmin/store/${encodeURIComponent(store.slug)}">${escapeHtml(store.name)}</a></td><td>${escapeHtml(store.slug)}</td><td>${escapeHtml(owner ? owner.email : '-')}</td><td>${escapeHtml(String(store.products.length))}</td><td>${escapeHtml(String(store.orders.length))}</td><td>${escapeHtml(formatMoney(revenue))}</td><td>${escapeHtml(formatDate(store.createdAt))}</td><td><div class="actions"><a class="btn btn-secondary" href="/store/${encodeURIComponent(store.slug)}" target="_blank" rel="noopener noreferrer">View</a><a class="btn btn-secondary" href="/superadmin/store/${encodeURIComponent(store.slug)}">Manage</a>${owner ? renderVendorLoginAction(owner.id, 'Login', 'btn') : ''}<form method="POST" action="/superadmin/store/${encodeURIComponent(store.slug)}/delete" onsubmit="return confirm('Delete this store and owner account?');"><button class="btn btn-danger" type="submit">Delete</button></form></div></td></tr>`; }).join('')}</tbody></table></div>` : '<div class="empty">No stores found.</div>';
   res.send(renderSuperAdminLayout(req, 'Stores', 'stores', `<section class="card panel"><h1 class="section-title">All stores</h1><p class="section-subtitle">Review every tenant store on the platform.</p>${html}</section>`));
 }));
 
@@ -105,7 +117,7 @@ router.get('/superadmin/store/:slug', requireSuperAdmin, route(async (req, res) 
             <div class="kpi-item"><strong>Created</strong><span>${escapeHtml(formatDate(store.createdAt))}</span></div>
           </div>
           <div style="height:16px;"></div>
-          ${owner ? `<a class="btn" href="/superadmin/login-as-vendor/${encodeURIComponent(owner.id)}" style="margin-bottom:8px;display:inline-block;">🚀 Login as Vendor</a><br>` : ''}
+          ${owner ? `${renderVendorLoginAction(owner.id, 'Login as Vendor', 'btn', 'margin-bottom:8px;display:inline-block;')}<br>` : ''}
           <form method="POST" action="/superadmin/store/${encodeURIComponent(store.slug)}/delete" onsubmit="return confirm('Delete this store and owner account?');"><button class="btn btn-danger" type="submit">Delete Store</button></form>
         </div>
         <div class="card panel">
@@ -130,6 +142,7 @@ router.post('/superadmin/store/:slug/delete', requireSuperAdmin, route(async (re
     if (store.ownerId && db.users[store.ownerId]) delete db.users[store.ownerId];
     delete db.stores[slug];
     await saveDB(db);
+    writeAuditLog(req, 'superadmin.store.delete', { slug, ownerId: store.ownerId || '' });
     // Subdomain deletion disabled - using /store/:slug
     setFlash(req, 'success', 'Store and owner account deleted successfully.');
     res.redirect('/superadmin/stores');
@@ -142,7 +155,7 @@ router.post('/superadmin/store/:slug/delete', requireSuperAdmin, route(async (re
 router.get('/superadmin/users', requireSuperAdmin, route(async (req, res) => {
   const db = req.db;
   const users = [...Object.values(db.users)].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-  const html = users.length ? `<div class="table-wrap"><table><thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Store</th><th>Products</th><th>Orders</th><th>Revenue</th><th>Joined</th><th>Actions</th></tr></thead><tbody>${users.map((user) => { const store = db.stores[user.storeSlug]; const revenue = (store ? store.orders : []).reduce((sum, o) => sum + (Number(o.amount) || 0), 0); return `<tr><td>${escapeHtml(user.name)}</td><td>${escapeHtml(user.email)}</td><td>${escapeHtml(user.phone || '-')}</td><td><a href="/superadmin/vendor/${encodeURIComponent(user.id)}">${escapeHtml(store ? store.name : '-')}</a></td><td>${escapeHtml(String(store ? store.products.length : 0))}</td><td>${escapeHtml(String(store ? store.orders.length : 0))}</td><td>${escapeHtml(formatMoney(revenue))}</td><td>${escapeHtml(formatDate(user.createdAt))}</td><td><div class="actions"><a class="btn btn-secondary" href="/superadmin/vendor/${encodeURIComponent(user.id)}/orders">Orders</a><a class="btn btn-secondary" href="/superadmin/vendor/${encodeURIComponent(user.id)}/products">Products</a><a class="btn" href="/superadmin/login-as-vendor/${encodeURIComponent(user.id)}">Login</a><form method="POST" action="/superadmin/user/${encodeURIComponent(user.id)}/delete" onsubmit="return confirm('Delete this user and store?');"><button class="btn btn-danger" type="submit">Delete</button></form></div></td></tr>`; }).join('')}</tbody></table></div>` : '<div class="empty">No users found.</div>';
+  const html = users.length ? `<div class="table-wrap"><table><thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Store</th><th>Products</th><th>Orders</th><th>Revenue</th><th>Joined</th><th>Actions</th></tr></thead><tbody>${users.map((user) => { const store = db.stores[user.storeSlug]; const revenue = (store ? store.orders : []).reduce((sum, o) => sum + (Number(o.amount) || 0), 0); return `<tr><td>${escapeHtml(user.name)}</td><td>${escapeHtml(user.email)}</td><td>${escapeHtml(user.phone || '-')}</td><td><a href="/superadmin/vendor/${encodeURIComponent(user.id)}">${escapeHtml(store ? store.name : '-')}</a></td><td>${escapeHtml(String(store ? store.products.length : 0))}</td><td>${escapeHtml(String(store ? store.orders.length : 0))}</td><td>${escapeHtml(formatMoney(revenue))}</td><td>${escapeHtml(formatDate(user.createdAt))}</td><td><div class="actions"><a class="btn btn-secondary" href="/superadmin/vendor/${encodeURIComponent(user.id)}/orders">Orders</a><a class="btn btn-secondary" href="/superadmin/vendor/${encodeURIComponent(user.id)}/products">Products</a>${renderVendorLoginAction(user.id, 'Login', 'btn')}<form method="POST" action="/superadmin/user/${encodeURIComponent(user.id)}/delete" onsubmit="return confirm('Delete this user and store?');"><button class="btn btn-danger" type="submit">Delete</button></form></div></td></tr>`; }).join('')}</tbody></table></div>` : '<div class="empty">No users found.</div>';
   res.send(renderSuperAdminLayout(req, 'Users', 'users', `<section class="card panel"><h1 class="section-title">All users</h1><p class="section-subtitle">Manage registered store owners across the platform.</p>${html}</section>`));
 }));
 
@@ -161,6 +174,7 @@ router.post('/superadmin/user/:id/delete', requireSuperAdmin, route(async (req, 
     }
     delete db.users[userId];
     await saveDB(db);
+    writeAuditLog(req, 'superadmin.user.delete', { userId, storeSlug: user.storeSlug || '' });
     setFlash(req, 'success', 'User and store deleted successfully.');
     res.redirect('/superadmin/users');
   } catch (error) {
@@ -181,6 +195,7 @@ router.post('/superadmin/products/:slug/delete/:id', requireSuperAdmin, route(as
     const removed = store.products.splice(productIndex, 1)[0];
     await Promise.all((Array.isArray(removed.images) ? removed.images : [removed.image]).filter(Boolean).map((image) => removeStoredFile(image)));
     await saveDB(db);
+    writeAuditLog(req, 'superadmin.product.delete', { slug, productId, productName: removed && removed.name ? removed.name : '' });
     setFlash(req, 'success', 'Product deleted successfully.');
     res.redirect(`/superadmin/store/${encodeURIComponent(slug)}`);
   } catch (error) {
@@ -195,16 +210,30 @@ router.post('/superadmin/subdomain/create/:slug', requireSuperAdmin, route(async
   res.redirect('/superadmin/stores');
 }));
 
-router.get('/superadmin/logout', route(async (req, res) => {
+async function handleSuperAdminLogout(req, res) {
+  if (!isTrustedNavigation(req)) {
+    setFlash(req, 'error', 'Security validation failed. Please try again from inside the super admin panel.');
+    res.redirect('/superadmin/dashboard');
+    return;
+  }
   try {
+    writeAuditLog(req, 'superadmin.logout', {});
     await new Promise((resolve) => req.session.destroy(() => resolve()));
     res.redirect('/superadmin');
   } catch (error) {
     res.redirect('/superadmin');
   }
-}));
+}
 
-router.get('/superadmin/login-as-vendor/:userId', requireSuperAdmin, route(async (req, res) => {
+router.get('/superadmin/logout', route(handleSuperAdminLogout));
+router.post('/superadmin/logout', route(handleSuperAdminLogout));
+
+async function handleLoginAsVendor(req, res) {
+  if (!isTrustedNavigation(req)) {
+    setFlash(req, 'error', 'Security validation failed. Please try again from inside the super admin panel.');
+    res.redirect('/superadmin/users');
+    return;
+  }
   const db = req.db;
   const user = db.users[req.params.userId];
   if (!user || !user.storeSlug) {
@@ -215,10 +244,19 @@ router.get('/superadmin/login-as-vendor/:userId', requireSuperAdmin, route(async
   req.session.userId = user.id;
   req.session.storeSlug = user.storeSlug;
   req.session.fromSuperAdmin = true;
+  writeAuditLog(req, 'superadmin.impersonate.vendor', { userId: user.id, storeSlug: user.storeSlug });
   res.redirect('/dashboard');
-}));
+}
 
-router.get('/superadmin/return-from-vendor', route(async (req, res) => {
+router.get('/superadmin/login-as-vendor/:userId', requireSuperAdmin, route(handleLoginAsVendor));
+router.post('/superadmin/login-as-vendor/:userId', requireSuperAdmin, route(handleLoginAsVendor));
+
+async function handleReturnFromVendor(req, res) {
+  if (!isTrustedNavigation(req)) {
+    setFlash(req, 'error', 'Security validation failed. Please try again from inside the dashboard.');
+    res.redirect('/dashboard');
+    return;
+  }
   if (!req.session.superAdminId) {
     setFlash(req, 'error', 'Super admin session not found.');
     res.redirect('/superadmin');
@@ -227,9 +265,13 @@ router.get('/superadmin/return-from-vendor', route(async (req, res) => {
   req.session.userId = null;
   req.session.storeSlug = null;
   req.session.fromSuperAdmin = null;
+  writeAuditLog(req, 'superadmin.impersonate.return', {});
   setFlash(req, 'success', 'Returned to Super Admin panel.');
   res.redirect('/superadmin/dashboard');
-}));
+}
+
+router.get('/superadmin/return-from-vendor', route(handleReturnFromVendor));
+router.post('/superadmin/return-from-vendor', route(handleReturnFromVendor));
 
 router.get('/superadmin/vendor/:userId/orders', requireSuperAdmin, route(async (req, res) => {
   const db = req.db;
@@ -258,7 +300,7 @@ router.get('/superadmin/vendor/:userId/orders', requireSuperAdmin, route(async (
           </div>
           <div class="action-bar">
             <a class="btn btn-secondary" href="/superadmin/vendor/${encodeURIComponent(user.id)}">← Back to Store</a>
-            <a class="btn" href="/superadmin/login-as-vendor/${encodeURIComponent(user.id)}">Login as Vendor</a>
+            ${renderVendorLoginAction(user.id, 'Login as Vendor', 'btn')}
           </div>
         </div>
         ${ordersHtml}
@@ -293,7 +335,7 @@ router.get('/superadmin/vendor/:userId/products', requireSuperAdmin, route(async
           </div>
           <div class="action-bar">
             <a class="btn btn-secondary" href="/superadmin/vendor/${encodeURIComponent(user.id)}">← Back to Store</a>
-            <a class="btn" href="/superadmin/login-as-vendor/${encodeURIComponent(user.id)}">Login as Vendor</a>
+            ${renderVendorLoginAction(user.id, 'Login as Vendor', 'btn')}
           </div>
         </div>
         ${productsHtml}
@@ -315,7 +357,7 @@ router.get('/superadmin/vendor/:userId/customers', requireSuperAdmin, route(asyn
     res.redirect('/superadmin/users');
     return;
   }
-  const customers = Object.values(db.customers || {}).filter((c) => c.storeSlug === user.storeSlug);
+  const customers = Object.values(store.customers || {});
   const customersHtml = customers.length ? `<div class="table-wrap"><table><thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Orders</th><th>Joined</th></tr></thead><tbody>${customers.map((customer) => `<tr><td>${escapeHtml(customer.name || '-')}</td><td>${escapeHtml(customer.email || '-')}</td><td>${escapeHtml(customer.phone || '-')}</td><td>${escapeHtml(String((customer.orderIds || []).length))}</td><td>${escapeHtml(formatDate(customer.createdAt))}</td></tr>`).join('')}</tbody></table></div>` : '<div class="empty">No customers found.</div>';
   const flash = renderFlashMessages(req);
   res.send(renderSuperAdminLayout(req, `Customers - ${store.name}`, 'vendors', `
@@ -328,7 +370,7 @@ router.get('/superadmin/vendor/:userId/customers', requireSuperAdmin, route(asyn
           </div>
           <div class="action-bar">
             <a class="btn btn-secondary" href="/superadmin/vendor/${encodeURIComponent(user.id)}">← Back to Store</a>
-            <a class="btn" href="/superadmin/login-as-vendor/${encodeURIComponent(user.id)}">Login as Vendor</a>
+            ${renderVendorLoginAction(user.id, 'Login as Vendor', 'btn')}
           </div>
         </div>
         ${customersHtml}
@@ -414,7 +456,7 @@ router.get('/superadmin/vendor/:userId', requireSuperAdmin, route(async (req, re
       <section class="card panel">
         <h2 class="section-title" style="font-size:24px;">Actions</h2>
         <div class="action-bar" style="margin-top:16px;">
-          <a class="btn" href="/superadmin/login-as-vendor/${encodeURIComponent(user.id)}">🚀 Login as Vendor</a>
+          ${renderVendorLoginAction(user.id, 'Login as Vendor', 'btn')}
           <a class="btn btn-secondary" href="/superadmin/stores">← Back to Stores</a>
           <a class="btn btn-secondary" href="/superadmin/users">← Back to Users</a>
         </div>
@@ -425,7 +467,7 @@ router.get('/superadmin/vendor/:userId', requireSuperAdmin, route(async (req, re
 router.get('/superadmin/vendors', requireSuperAdmin, route(async (req, res) => {
   const db = req.db;
   const users = Object.values(db.users).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-  const html = users.length ? `<div class="table-wrap"><table><thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Store</th><th>Products</th><th>Orders</th><th>Revenue</th><th>Actions</th></tr></thead><tbody>${users.map((user) => { const store = db.stores[user.storeSlug]; const orders = store ? store.orders : []; const revenue = orders.reduce((sum, o) => sum + (Number(o.amount) || 0), 0); return `<tr><td>${escapeHtml(user.name || '-')}</td><td>${escapeHtml(user.email || '-')}</td><td>${escapeHtml(user.phone || '-')}</td><td><a href="/superadmin/vendor/${encodeURIComponent(user.id)}">${escapeHtml(store ? store.name : '-')}</a></td><td>${escapeHtml(String(store ? store.products.length : 0))}</td><td>${escapeHtml(String(orders.length))}</td><td>${escapeHtml(formatMoney(revenue))}</td><td><div class="actions"><a class="btn btn-secondary" href="/superadmin/vendor/${encodeURIComponent(user.id)}/orders">Orders</a><a class="btn btn-secondary" href="/superadmin/vendor/${encodeURIComponent(user.id)}/products">Products</a><a class="btn btn-secondary" href="/superadmin/vendor/${encodeURIComponent(user.id)}">Manage</a><a class="btn" href="/superadmin/login-as-vendor/${encodeURIComponent(user.id)}">Login</a></div></td></tr>`; }).join('')}</tbody></table></div>` : '<div class="empty">No vendors found.</div>';
+  const html = users.length ? `<div class="table-wrap"><table><thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Store</th><th>Products</th><th>Orders</th><th>Revenue</th><th>Actions</th></tr></thead><tbody>${users.map((user) => { const store = db.stores[user.storeSlug]; const orders = store ? store.orders : []; const revenue = orders.reduce((sum, o) => sum + (Number(o.amount) || 0), 0); return `<tr><td>${escapeHtml(user.name || '-')}</td><td>${escapeHtml(user.email || '-')}</td><td>${escapeHtml(user.phone || '-')}</td><td><a href="/superadmin/vendor/${encodeURIComponent(user.id)}">${escapeHtml(store ? store.name : '-')}</a></td><td>${escapeHtml(String(store ? store.products.length : 0))}</td><td>${escapeHtml(String(orders.length))}</td><td>${escapeHtml(formatMoney(revenue))}</td><td><div class="actions"><a class="btn btn-secondary" href="/superadmin/vendor/${encodeURIComponent(user.id)}/orders">Orders</a><a class="btn btn-secondary" href="/superadmin/vendor/${encodeURIComponent(user.id)}/products">Products</a><a class="btn btn-secondary" href="/superadmin/vendor/${encodeURIComponent(user.id)}">Manage</a>${renderVendorLoginAction(user.id, 'Login', 'btn')}</div></td></tr>`; }).join('')}</tbody></table></div>` : '<div class="empty">No vendors found.</div>';
   const flash = renderFlashMessages(req);
   res.send(renderSuperAdminLayout(req, 'Vendors', 'vendors', `
       ${flash}
