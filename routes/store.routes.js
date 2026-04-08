@@ -249,6 +249,93 @@ function adjustOrderInventory(store, order, direction) {
   return changed;
 }
 
+function normalizeQueryList(value) {
+  if (Array.isArray(value)) return value.map((item) => String(item || '').trim()).filter(Boolean);
+  const safe = String(value || '').trim();
+  return safe ? [safe] : [];
+}
+
+function getProductSalesMap(store) {
+  const map = {};
+  (Array.isArray(store && store.orders) ? store.orders : []).forEach((order) => {
+    if (String(order && order.status || '').trim() === 'cancelled') return;
+    (Array.isArray(order && order.items) ? order.items : []).forEach((item) => {
+      const productId = String(item && item.productId || '').trim();
+      if (!productId) return;
+      map[productId] = (map[productId] || 0) + Math.max(1, Number(item.quantity || 1));
+    });
+  });
+  return map;
+}
+
+function matchesSelectedCategories(product, categories, selectedCategories) {
+  if (!selectedCategories.length) return true;
+  return selectedCategories.some((selectedCategory) => {
+    const directMatch = String(product.category || '').trim() === selectedCategory;
+    const mappedMatch = categories.some((category) => category.name === selectedCategory && (category.productIds || []).includes(product.id));
+    return directMatch || mappedMatch;
+  });
+}
+
+function buildListingQuery(params) {
+  const query = new URLSearchParams();
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (Array.isArray(value)) {
+      value.filter(Boolean).forEach((item) => query.append(key, String(item)));
+      return;
+    }
+    if (value === undefined || value === null || value === '') return;
+    query.set(key, String(value));
+  });
+  const result = query.toString();
+  return result ? `?${result}` : '';
+}
+
+function getFilteredAndSortedProducts(store, ss, categories, filters) {
+  const searchText = String(filters && filters.search || '').trim();
+  const search = searchText.toLowerCase();
+  const selectedCategories = Array.isArray(filters && filters.selectedCategories) ? filters.selectedCategories : [];
+  const availability = ['in_stock', 'out_of_stock'].includes(String(filters && filters.availability || '')) ? String(filters.availability || '') : '';
+  const minPrice = Math.max(0, Number(filters && filters.minPrice || 0) || 0);
+  const rawMaxPrice = Number(filters && filters.maxPrice || 0) || 0;
+  const maxPrice = rawMaxPrice > 0 ? rawMaxPrice : 0;
+  const salesMap = getProductSalesMap(store);
+  let visibleProducts = (Array.isArray(store && store.products) ? store.products : []).filter((product) => {
+    if (product.active === false) return false;
+    const stock = Math.max(0, Number(product.stock || 0));
+    if (availability === 'in_stock' && stock <= 0) return false;
+    if (availability === 'out_of_stock' && stock > 0) return false;
+    if (!availability && ss.productSettings.hideOutOfStock && stock <= 0) return false;
+    const searchable = [product.name, product.description, product.sku, product.category, String(product.price || ''), String(product.comparePrice || '')].join(' ').toLowerCase();
+    const matchesSearch = !search || searchable.includes(search);
+    if (!matchesSearch) return false;
+    if (!matchesSelectedCategories(product, categories, selectedCategories)) return false;
+    const price = parsePrice(product.price);
+    if (minPrice && price < minPrice) return false;
+    if (maxPrice && price > maxPrice) return false;
+    return true;
+  });
+  const sort = String(filters && filters.sort || '').trim();
+  if (sort === 'price_asc') visibleProducts.sort((a, b) => parsePrice(a.price) - parsePrice(b.price));
+  else if (sort === 'price_desc') visibleProducts.sort((a, b) => parsePrice(b.price) - parsePrice(a.price));
+  else if (sort === 'newest') visibleProducts.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  else if (sort === 'alpha_asc') visibleProducts.sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
+  else if (sort === 'alpha_desc') visibleProducts.sort((a, b) => String(b.name || '').localeCompare(String(a.name || '')));
+  else if (sort === 'best_selling') visibleProducts.sort((a, b) => (salesMap[b.id] || 0) - (salesMap[a.id] || 0));
+  return { visibleProducts, sort, search: searchText, selectedCategories, availability, minPrice, maxPrice };
+}
+
+function renderListingSortOptions(action, state) {
+  const hidden = [
+    state.search ? `<input type="hidden" name="search" value="${escapeHtml(state.search)}">` : '',
+    state.selectedCategories.map((category) => `<input type="hidden" name="category" value="${escapeHtml(category)}">`).join(''),
+    state.minPrice ? `<input type="hidden" name="minPrice" value="${escapeHtml(String(state.minPrice))}">` : '',
+    state.maxPrice ? `<input type="hidden" name="maxPrice" value="${escapeHtml(String(state.maxPrice))}">` : '',
+    state.availability ? `<input type="hidden" name="availability" value="${escapeHtml(state.availability)}">` : ''
+  ].join('');
+  return `<div class="app-shop-toolbar"><form method="GET" action="${escapeHtml(action)}" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">${hidden}<select name="sort" onchange="this.form.submit()" style="padding:10px 14px;border-radius:999px;border:1px solid #e2e8f0;font-size:13px;background:#fff;"><option value="">Sort by</option><option value="best_selling"${state.sort === 'best_selling' ? ' selected' : ''}>Best Selling</option><option value="newest"${state.sort === 'newest' ? ' selected' : ''}>Newest First</option><option value="price_asc"${state.sort === 'price_asc' ? ' selected' : ''}>Price: Low to High</option><option value="price_desc"${state.sort === 'price_desc' ? ' selected' : ''}>Price: High to Low</option><option value="alpha_asc"${state.sort === 'alpha_asc' ? ' selected' : ''}>A-Z</option><option value="alpha_desc"${state.sort === 'alpha_desc' ? ' selected' : ''}>Z-A</option></select></form></div>`;
+}
+
 // URL redirect middleware
 router.use('/:slug', route(async (req, res, next) => {
   const slug = String(req.params.slug || '').trim();
@@ -374,23 +461,19 @@ router.get('/:slug', route(async (req, res) => {
   const cfg = store.themeConfig || {};
   const cart = getStoreCart(req, slug);
   const wishlist = getStoreWishlist(req, slug);
-  const search = String(req.query.search || '').trim().toLowerCase();
-  const selectedCategory = String(req.query.category || '').trim();
-  const sort = String(req.query.sort || '').trim();
+  const selectedCategories = normalizeQueryList(req.query.category);
   const page = Math.max(1, parseInt(req.query.page || 1, 10));
   const perPage = 12;
   const categories = Array.isArray(store.categories) ? store.categories : [];
-  let visibleProducts = store.products.filter((product) => {
-    if (product.active === false) return false;
-    if (ss.productSettings.hideOutOfStock && Number(product.stock || 0) <= 0) return false;
-    const searchable = [product.name, product.description, product.sku, product.category, String(product.price || ''), String(product.comparePrice || '')].join(' ').toLowerCase();
-    const matchesSearch = !search || searchable.includes(search);
-    const matchesCategory = !selectedCategory || selectedCategory === 'all' || String(product.category || '').trim() === selectedCategory || categories.some((category) => category.name === selectedCategory && (category.productIds || []).includes(product.id));
-    return matchesSearch && matchesCategory;
+  const listingState = getFilteredAndSortedProducts(store, ss, categories, {
+    search: req.query.search,
+    selectedCategories,
+    availability: req.query.availability,
+    minPrice: req.query.minPrice,
+    maxPrice: req.query.maxPrice,
+    sort: req.query.sort
   });
-  if (sort === 'price_asc') visibleProducts.sort((a, b) => parsePrice(a.price) - parsePrice(b.price));
-  else if (sort === 'price_desc') visibleProducts.sort((a, b) => parsePrice(b.price) - parsePrice(a.price));
-  else if (sort === 'newest') visibleProducts.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  const { visibleProducts, sort, search, availability, minPrice, maxPrice } = listingState;
   const totalPages = Math.ceil(visibleProducts.length / perPage);
   const pagedProducts = visibleProducts.slice((page - 1) * perPage, page * perPage);
   const cartDetails = getCartDetails(store, cart);
@@ -402,9 +485,9 @@ router.get('/:slug', route(async (req, res) => {
   const themeCSS = getThemeCSS(currentTemplate, store.theme, cfg);
   const isSubdomain = !!(req.subdomainSlug);
   const storeBase = isSubdomain ? '' : '/store/' + encodeURIComponent(slug);
-  const sortOptions = `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px;"><form method="GET" action="${storeBase || '/'}" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">${search ? `<input type="hidden" name="search" value="${escapeHtml(search)}">` : ''}${selectedCategory ? `<input type="hidden" name="category" value="${escapeHtml(selectedCategory)}">` : ''}<select name="sort" onchange="this.form.submit()" style="padding:8px 12px;border-radius:999px;border:1px solid #e2e8f0;font-size:13px;"><option value="">Sort by</option><option value="newest"${sort === 'newest' ? ' selected' : ''}>Newest First</option><option value="price_asc"${sort === 'price_asc' ? ' selected' : ''}>Price: Low to High</option><option value="price_desc"${sort === 'price_desc' ? ' selected' : ''}>Price: High to Low</option></select></form></div>`;
-  const paginationHtml = totalPages > 1 ? `<div style="display:flex;gap:8px;justify-content:center;padding:20px 0;flex-wrap:wrap;">${Array.from({ length: totalPages }, (_, i) => `<a href="${storeBase || '/'}?page=${i + 1}${search ? '&search=' + encodeURIComponent(search) : ''}${selectedCategory ? '&category=' + encodeURIComponent(selectedCategory) : ''}${sort ? '&sort=' + encodeURIComponent(sort) : ''}" style="padding:8px 14px;border-radius:999px;background:${page === i + 1 ? (cfg.primaryColor || '#3b5bfd') : '#fff'};color:${page === i + 1 ? '#fff' : '#333'};border:1px solid #e2e8f0;font-size:13px;font-weight:700;text-decoration:none;">${i + 1}</a>`).join('')}</div>` : '';
-  const storeContent = renderStoreByTheme(currentTemplate, store, slug, { products: pagedProducts, categories, cartCount, wishlistCount, wishlist, search, selectedCategory, currentTemplate, customer, cfg, isDark, sortOptions, paginationHtml, isSubdomain, storeBase, req, cartDetails, wishlistItems, featuredProduct: visibleProducts[0] || store.products.find((item) => item.active !== false) });
+  const sortOptions = renderListingSortOptions(storeBase || '/', { search, selectedCategories, sort, minPrice, maxPrice, availability });
+  const paginationHtml = totalPages > 1 ? `<div style="display:flex;gap:8px;justify-content:center;padding:20px 0;flex-wrap:wrap;">${Array.from({ length: totalPages }, (_, i) => `<a href="${storeBase || '/'}${buildListingQuery({ page: i + 1, search, category: selectedCategories, sort, minPrice, maxPrice, availability })}" style="padding:8px 14px;border-radius:999px;background:${page === i + 1 ? (cfg.primaryColor || '#3b5bfd') : '#fff'};color:${page === i + 1 ? '#fff' : '#333'};border:1px solid #e2e8f0;font-size:13px;font-weight:700;text-decoration:none;">${i + 1}</a>`).join('')}</div>` : '';
+  const storeContent = renderStoreByTheme(currentTemplate, store, slug, { products: pagedProducts, categories, cartCount, wishlistCount, wishlist, search, selectedCategory: selectedCategories[0] || '', selectedCategories, currentTemplate, customer, cfg, isDark, sortOptions, paginationHtml, isSubdomain, storeBase, req, cartDetails, wishlistItems, featuredProduct: visibleProducts[0] || store.products.find((item) => item.active !== false), filterState: { search, categories: selectedCategories, sort, minPrice, maxPrice, availability } });
   res.send(renderHtmlShell(`${store.name} - Store`, `<div class="store-page"><div class="store-wrap">${storeContent}</div></div>`, getStoreShellOptions(req, store, { extraStyles: themeCSS, metaTags: getStoreMetaTags(store, { title: ss.seoSettings.title || `${store.name} - Store`, description: ss.seoSettings.description || store.description }) }))); 
 }));
 
@@ -419,23 +502,19 @@ router.get('/:slug/shop', route(async (req, res) => {
   const cfg = store.themeConfig || {};
   const cart = getStoreCart(req, slug);
   const wishlist = getStoreWishlist(req, slug);
-  const search = String(req.query.search || '').trim().toLowerCase();
-  const selectedCategory = String(req.query.category || '').trim();
-  const sort = String(req.query.sort || '').trim();
+  const selectedCategories = normalizeQueryList(req.query.category);
   const page = Math.max(1, parseInt(req.query.page || 1, 10));
   const perPage = 24;
   const categories = Array.isArray(store.categories) ? store.categories : [];
-  let visibleProducts = store.products.filter((product) => {
-    if (product.active === false) return false;
-    if (ss.productSettings.hideOutOfStock && Number(product.stock || 0) <= 0) return false;
-    const searchable = [product.name, product.description, product.sku, product.category, String(product.price || ''), String(product.comparePrice || '')].join(' ').toLowerCase();
-    const matchesSearch = !search || searchable.includes(search);
-    const matchesCategory = !selectedCategory || selectedCategory === 'all' || String(product.category || '').trim() === selectedCategory || categories.some((category) => category.name === selectedCategory && (category.productIds || []).includes(product.id));
-    return matchesSearch && matchesCategory;
+  const listingState = getFilteredAndSortedProducts(store, ss, categories, {
+    search: req.query.search,
+    selectedCategories,
+    availability: req.query.availability,
+    minPrice: req.query.minPrice,
+    maxPrice: req.query.maxPrice,
+    sort: req.query.sort
   });
-  if (sort === 'price_asc') visibleProducts.sort((a, b) => parsePrice(a.price) - parsePrice(b.price));
-  else if (sort === 'price_desc') visibleProducts.sort((a, b) => parsePrice(b.price) - parsePrice(a.price));
-  else if (sort === 'newest') visibleProducts.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  const { visibleProducts, sort, search, availability, minPrice, maxPrice } = listingState;
   const totalPages = Math.ceil(visibleProducts.length / perPage);
   const pagedProducts = visibleProducts.slice((page - 1) * perPage, page * perPage);
   const cartDetails = getCartDetails(store, cart);
@@ -447,11 +526,11 @@ router.get('/:slug/shop', route(async (req, res) => {
   const themeCSS = getThemeCSS(currentTemplate, store.theme, cfg);
   const isSubdomain = !!(req.subdomainSlug);
   const storeBase = isSubdomain ? '' : '/store/' + encodeURIComponent(slug);
-  const sortOptions = `<div class="app-shop-toolbar"><form method="GET" action="${storeBase}/shop" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">${search ? `<input type="hidden" name="search" value="${escapeHtml(search)}">` : ''}${selectedCategory ? `<input type="hidden" name="category" value="${escapeHtml(selectedCategory)}">` : ''}<select name="sort" onchange="this.form.submit()" style="padding:10px 14px;border-radius:999px;border:1px solid #e2e8f0;font-size:13px;background:#fff;"><option value="">Sort by</option><option value="newest"${sort === 'newest' ? ' selected' : ''}>Newest First</option><option value="price_asc"${sort === 'price_asc' ? ' selected' : ''}>Price: Low to High</option><option value="price_desc"${sort === 'price_desc' ? ' selected' : ''}>Price: High to Low</option></select></form></div>`;
+  const sortOptions = renderListingSortOptions(`${storeBase}/shop`, { search, selectedCategories, sort, minPrice, maxPrice, availability });
   const paginationBase = `${storeBase}/shop`;
-  const paginationHtml = totalPages > 1 ? `<div style="display:flex;gap:8px;justify-content:center;padding:20px 0;flex-wrap:wrap;">${Array.from({ length: totalPages }, (_, i) => `<a href="${paginationBase}?page=${i + 1}${search ? '&search=' + encodeURIComponent(search) : ''}${selectedCategory ? '&category=' + encodeURIComponent(selectedCategory) : ''}${sort ? '&sort=' + encodeURIComponent(sort) : ''}" style="padding:8px 14px;border-radius:999px;background:${page === i + 1 ? (cfg.primaryColor || '#3b5bfd') : '#fff'};color:${page === i + 1 ? '#fff' : '#333'};border:1px solid #e2e8f0;font-size:13px;font-weight:700;text-decoration:none;">${i + 1}</a>`).join('')}</div>` : '';
+  const paginationHtml = totalPages > 1 ? `<div style="display:flex;gap:8px;justify-content:center;padding:20px 0;flex-wrap:wrap;">${Array.from({ length: totalPages }, (_, i) => `<a href="${paginationBase}${buildListingQuery({ page: i + 1, search, category: selectedCategories, sort, minPrice, maxPrice, availability })}" style="padding:8px 14px;border-radius:999px;background:${page === i + 1 ? (cfg.primaryColor || '#3b5bfd') : '#fff'};color:${page === i + 1 ? '#fff' : '#333'};border:1px solid #e2e8f0;font-size:13px;font-weight:700;text-decoration:none;">${i + 1}</a>`).join('')}</div>` : '';
   if ((currentTemplate && currentTemplate.layout) === 'app') {
-    const storeContent = renderAppShopAllPage(store, slug, { products: pagedProducts, cartCount, wishlistCount, wishlist, search, customer, cfg, paginationHtml, storeBase, cartDetails, wishlistItems, labels: ss.labelSettings, totalProducts: visibleProducts.length });
+    const storeContent = renderAppShopAllPage(store, slug, { products: pagedProducts, categories, cartCount, wishlistCount, wishlist, search, customer, cfg, paginationHtml, storeBase, cartDetails, wishlistItems, labels: ss.labelSettings, totalProducts: visibleProducts.length, sortOptions, filterState: { search, categories: selectedCategories, sort, minPrice, maxPrice, availability } });
     res.send(renderHtmlShell(`${store.name} - Shop All`, `<div class="store-page"><div class="store-wrap">${storeContent}</div></div>`, getStoreShellOptions(req, store, { extraStyles: themeCSS, metaTags: getStoreMetaTags(store, { title: `${store.name} - Shop All`, description: ss.seoSettings.description || store.description }) })));
     return;
   }

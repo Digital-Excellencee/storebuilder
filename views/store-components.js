@@ -23,21 +23,22 @@ function renderCategorySection(categories, slug, cfg) {
   const forceGrid = layout === 'grid' || style === 'grid';
   const isCarousel = layout === 'carousel' || (!forceGrid && (layout === 'auto' && categories.length >= 4));
   const base = `/store/${encodeURIComponent(slug)}`;
+  const shopBase = `${base}/shop`;
   if (style === 'pill') {
     return `<div class="app-section"><div class="app-section-head"><h2 class="app-section-title">${escapeHtml(title)}</h2><a href="${base}">View all</a></div><div class="cat-tags">${categories.map((cat) => {
       const img = cat.image ? `<img src="${escapeHtml(cat.image)}" alt="${escapeHtml(cat.name)}">` : `<div class="cat-icon pill-icon">${escapeHtml(cat.name.charAt(0).toUpperCase())}</div>`;
-      return `<a class="cat-tag" href="${base}?category=${encodeURIComponent(cat.name)}">${img}${escapeHtml(cat.name)}</a>`;
+      return `<a class="cat-tag" href="${shopBase}?category=${encodeURIComponent(cat.name)}">${img}${escapeHtml(cat.name)}</a>`;
     }).join('')}</div></div>`;
   }
   if (isCarousel) {
-    return `<div class="app-section"><div class="app-section-head"><h2 class="app-section-title">${escapeHtml(title)}</h2><a href="${base}">View all</a></div><div class="cat-scroll">${categories.map((cat) => {
+    return `<div class="app-section"><div class="app-section-head"><h2 class="app-section-title">${escapeHtml(title)}</h2><a href="${shopBase}">View all</a></div><div class="cat-scroll">${categories.map((cat) => {
       const img = cat.image ? `<img class="cat-icon" src="${escapeHtml(cat.image)}" alt="${escapeHtml(cat.name)}">` : `<div class="cat-icon ${escapeHtml(style)}">${escapeHtml(cat.name.charAt(0).toUpperCase())}</div>`;
-      return `<a class="cat-item" href="${base}?category=${encodeURIComponent(cat.name)}">${img}<span class="cat-label">${escapeHtml(cat.name)}</span></a>`;
+      return `<a class="cat-item" href="${shopBase}?category=${encodeURIComponent(cat.name)}">${img}<span class="cat-label">${escapeHtml(cat.name)}</span></a>`;
     }).join('')}</div></div>`;
   }
-  return `<div class="app-section"><div class="app-section-head"><h2 class="app-section-title">${escapeHtml(title)}</h2><a href="${base}">View all</a></div><div class="cat-grid">${categories.map((cat) => {
+  return `<div class="app-section"><div class="app-section-head"><h2 class="app-section-title">${escapeHtml(title)}</h2><a href="${shopBase}">View all</a></div><div class="cat-grid">${categories.map((cat) => {
     const img = cat.image ? `<img class="cat-icon" src="${escapeHtml(cat.image)}" alt="${escapeHtml(cat.name)}">` : `<div class="cat-icon ${escapeHtml(style)}">${escapeHtml(cat.name.charAt(0).toUpperCase())}</div>`;
-    return `<a class="cat-item grid-item" href="${base}?category=${encodeURIComponent(cat.name)}">${img}<span class="cat-label">${escapeHtml(cat.name)}</span></a>`;
+    return `<a class="cat-item grid-item" href="${shopBase}?category=${encodeURIComponent(cat.name)}">${img}<span class="cat-label">${escapeHtml(cat.name)}</span></a>`;
   }).join('')}</div></div>`;
 }
 
@@ -51,32 +52,38 @@ function renderBannerCarousel(cfg, slug) {
   const subtitle = (cfg.bannerSubtitle || '').trim();
   const cta = (cfg.bannerCta || '').trim();
   const base = `/store/${encodeURIComponent(slug)}`;
-  return `<div class="app-banner">
+  return `<div class="app-banner" data-banner-carousel>
     <div class="app-banner-slides">
       ${images.map((img) => `<div class="app-banner-slide"><img src="${escapeHtml(img)}" alt="${escapeHtml(title || 'Banner')}" loading="eager"></div>`).join('')}
       ${mobileImages.map((img) => `<div class="app-banner-slide app-banner-slide-mobile"><img src="${escapeHtml(img)}" alt="${escapeHtml(title || 'Banner')}" loading="eager"></div>`).join('')}
     </div>
-    ${title || subtitle || cta ? `<div class="app-banner-content">${title ? `<h2 class="app-banner-title">${escapeHtml(title)}</h2>` : ''}${subtitle ? `<p class="app-banner-sub">${escapeHtml(subtitle)}</p>` : ''}${cta ? `<a class="app-banner-cta" href="${base}">${escapeHtml(cta)}</a>` : ''}</div>` : ''}
+    ${title || subtitle || cta ? `<div class="app-banner-content">${title ? `<h2 class="app-banner-title">${escapeHtml(title)}</h2>` : ''}${subtitle ? `<p class="app-banner-sub">${escapeHtml(subtitle)}</p>` : ''}${cta ? `<a class="app-banner-cta" href="${base}/shop">${escapeHtml(cta)}</a>` : ''}</div>` : ''}
+    ${images.length > 1 ? `<button type="button" class="app-banner-arrow app-banner-arrow-prev" data-dir="prev" aria-label="Previous slide">‹</button><button type="button" class="app-banner-arrow app-banner-arrow-next" data-dir="next" aria-label="Next slide">›</button>` : ''}
     ${images.length > 1 ? `<div class="app-banner-dots">${images.map((_, i) => `<button type="button" class="app-banner-dot${i === 0 ? ' active' : ''}" data-index="${i}" aria-label="Go to slide ${i + 1}"></button>`).join('')}</div>` : ''}
   </div>
   <script>
   (function(){
-    var s=document.querySelector('.app-banner-slides');
+    var shell=document.querySelector('[data-banner-carousel]');
+    if(!shell)return;
+    var s=shell.querySelector('.app-banner-slides');
     if(!s)return;
     var slides=[].slice.call(s.querySelectorAll('.app-banner-slide:not(.app-banner-slide-mobile)'));
-    var dots=[].slice.call(document.querySelectorAll('.app-banner-dot'));
+    var dots=[].slice.call(shell.querySelectorAll('.app-banner-dot'));
+    var arrows=[].slice.call(shell.querySelectorAll('.app-banner-arrow'));
     if(slides.length<2)return;
-    var cur=0;
+    var cur=0,timer=null;
     function go(n){
       cur=(n+slides.length)%slides.length;
       s.style.transform='translateX(-'+cur*100+'%)';
       dots.forEach(function(d,i){d.classList.toggle('active',i===cur);});
     }
+    function start(){ if(timer) clearInterval(timer); timer=setInterval(function(){go(cur+1);},3000); }
     s.style.transition='transform .3s ease';
     s.style.display='flex';
     slides.forEach(function(sl){sl.style.flex='0 0 100%'; sl.style.minWidth='100%';});
     dots.forEach(function(d){d.addEventListener('click',function(){go(+d.dataset.index);});});
-    setInterval(function(){go(cur+1);},5000);
+    arrows.forEach(function(btn){btn.addEventListener('click',function(){go(cur+(btn.dataset.dir==='next'?1:-1));start();});});
+    start();
   })();
   </script>`;
 }

@@ -28,7 +28,8 @@ function renderAppStyleStore(store, slug, data) {
     storeBase,
     cartDetails,
     wishlistItems,
-    featuredProduct
+    featuredProduct,
+    filterState
   } = data;
   const base = storeBase !== undefined ? storeBase : '/store/' + encodeURIComponent(slug);
   const labels = ensureStoreSettings(store).labelSettings;
@@ -37,7 +38,7 @@ function renderAppStyleStore(store, slug, data) {
   const topBar = renderTopBar(cfg);
   const productCardStyle = cfg.productCardStyle || 'style-2';
   const productsTitle = cfg.productsTitle || labels.productsHeading || 'All Products';
-  const hero = carousel || renderAppFeaturedHero(store, slug, base, featuredProduct || products[0], cfg);
+  const hero = carousel || renderAppFeaturedHero(store, slug, base, products, cfg);
   const productCards = products.map((product) => renderAppProductCard(product, {
     base,
     wished: wishlist.includes(product.id),
@@ -49,7 +50,7 @@ function renderAppStyleStore(store, slug, data) {
     <section class="app-section">
       <div class="app-rail-head">
         <div class="section-label-row"><span class="section-flame">🔥</span><h2 class="app-section-title">Best Selling</h2></div>
-        <a href="${base || '/'}?sort=newest">View All</a>
+        <a href="${base}/shop?sort=best_selling">View All</a>
       </div>
       <div class="app-horizontal-cards">${products.slice(0, 4).map((product) => renderAppProductCard(product, {
         base,
@@ -66,12 +67,12 @@ function renderAppStyleStore(store, slug, data) {
     <section class="app-section">
       <div class="app-rail-head">
         <div class="section-label-row"><span class="section-flame">⭐</span><h2 class="app-section-title">${escapeHtml(productsTitle || 'Popular Products')}</h2></div>
-        <a href="${base || '/'}?sort=newest">View All</a>
+        <a href="${base}/shop">View All</a>
       </div>
       ${sortOptions || ''}
       <div class="app-grid ${productCardStyle === 'style-4' ? 'list-layout' : ''}">${productCards || '<div class="store-empty">No products yet.</div>'}</div>
       ${paginationHtml || ''}
-      <div class="view-all-wrap"><a class="view-all-btn" href="${base || '/'}?sort=newest">View All Products →</a></div>
+      <div class="view-all-wrap"><a class="view-all-btn" href="${base}/shop">View All Products →</a></div>
     </section>
     ${renderAppSupportSections(store, cfg)}
     ${renderAppThemeFooter(store, base, cfg)}`;
@@ -86,6 +87,7 @@ function renderAppStyleStore(store, slug, data) {
     categories,
     labels,
     search,
+    filterState,
     activeNav: 'home',
     content,
     floatingWhatsapp: true
@@ -124,7 +126,7 @@ function renderAppThemeFooter(store, base, cfg) {
           <h4>Quick Links</h4>
           <ul>
             <li><a href="${base || '/'}">Home</a></li>
-            <li><a href="${base || '/'}?category=all">Shop All</a></li>
+            <li><a href="${base}/shop">Shop All</a></li>
             <li><a href="${base}/track-order">Track Order</a></li>
             <li><a href="${base}/account">My Account</a></li>
           </ul>
@@ -302,22 +304,17 @@ function renderAppProductPage(store, slug, data) {
   });
 }
 
-function renderAppFeaturedHero(store, slug, base, product, cfg) {
-  if (!product) {
+function renderAppFeaturedHero(store, slug, base, products, cfg) {
+  const slides = (Array.isArray(products) ? products : [products]).filter(Boolean).slice(0, 3);
+  if (!slides.length) {
     return `<section class="app-section"><div class="app-empty-hero"><span class="app-eyebrow">New storefront</span><h2>Start adding products to shape this theme.</h2><p>Once products or banners are added, this hero turns into a premium landing section.</p></div></section>`;
   }
   return `
-    <section class="app-feature-hero">
-      <div class="app-feature-media">${product.image ? `<img src="${escapeHtml(product.image)}" alt="${escapeHtml(product.name)}">` : '<div class="app-product-placeholder">No image</div>'}</div>
-      <div class="app-feature-overlay">
-        <span class="app-eyebrow">Featured drop</span>
-        <h1>${escapeHtml(product.name)}</h1>
-        <p>${escapeHtml(product.description || 'Designed to convert better on mobile with strong imagery and direct purchase actions.')}</p>
-        <div class="app-feature-actions">
-          <a class="btn" href="${base}/product/${encodeURIComponent(product.id)}">Shop now</a>
-          <form method="POST" action="${base}/cart/add/${encodeURIComponent(product.id)}"><button class="btn btn-secondary" type="submit">Quick add</button></form>
-        </div>
+    <section class="app-feature-hero app-feature-carousel" data-hero-carousel>
+      <div class="app-feature-track">
+        ${slides.map((product, index) => `<article class="app-feature-slide${index === 0 ? ' active' : ''}"><div class="app-feature-media">${product.image ? `<img src="${escapeHtml(product.image)}" alt="${escapeHtml(product.name)}">` : '<div class="app-product-placeholder">No image</div>'}</div><div class="app-feature-overlay"><span class="app-eyebrow">Featured drop</span><h1>${escapeHtml(product.name)}</h1><p>${escapeHtml(product.description || 'Designed to convert better on mobile with strong imagery and direct purchase actions.')}</p><div class="app-feature-actions"><a class="btn" href="${base}/shop">Shop now</a><a class="btn btn-outline" href="${base}/product/${encodeURIComponent(product.id)}">View product</a></div></div></article>`).join('')}
       </div>
+      ${slides.length > 1 ? `<button type="button" class="app-feature-arrow app-feature-arrow-prev" data-hero-dir="prev" aria-label="Previous slide">‹</button><button type="button" class="app-feature-arrow app-feature-arrow-next" data-hero-dir="next" aria-label="Next slide">›</button><div class="app-feature-dots">${slides.map((_, index) => `<button type="button" class="app-feature-dot${index === 0 ? ' active' : ''}" data-hero-index="${index}" aria-label="Go to slide ${index + 1}"></button>`).join('')}</div>` : ''}
     </section>`;
 }
 
@@ -333,6 +330,7 @@ function renderAppThemeScaffold(store, slug, options) {
     categories = [],
     labels,
     search,
+    filterState = {},
     activeNav,
     content,
     floatingWhatsapp,
@@ -354,8 +352,20 @@ function renderAppThemeScaffold(store, slug, options) {
       <div class="app-panel-scroll">
         <div class="app-panel-brand">${logoBlock}<div><strong>${escapeHtml(store.name)}</strong><span>${escapeHtml(store.description || 'Mobile-optimised storefront')}</span></div></div>
         <nav class="app-panel-nav">${menuLinks.map((item) => `<a href="${escapeHtml(item.href)}">${escapeHtml(item.label)}</a>`).join('')}</nav>
-        ${categories.length ? `<div class="app-panel-section"><span class="app-panel-label">Shop by category</span><div class="app-panel-tags">${categories.slice(0, 12).map((category) => `<a href="${base}?category=${encodeURIComponent(category.name)}">${escapeHtml(category.name)}</a>`).join('')}</div></div>` : ''}
+        ${categories.length ? `<div class="app-panel-section"><span class="app-panel-label">Shop by category</span><div class="app-panel-tags">${categories.slice(0, 12).map((category) => `<a href="${base}/shop?category=${encodeURIComponent(category.name)}">${escapeHtml(category.name)}</a>`).join('')}</div></div>` : ''}
       </div>
+    </aside>`;
+  const filterPanel = `
+    <aside class="app-side-panel app-side-panel-right" data-panel="filters">
+      <div class="app-panel-head"><strong>Filters</strong><button type="button" class="app-panel-close" data-panel-close>×</button></div>
+      <form method="GET" action="${base}/shop" class="app-panel-scroll app-filter-form">
+        ${search ? `<input type="hidden" name="search" value="${escapeHtml(search)}">` : ''}
+        <div class="app-filter-group"><label class="app-filter-label" for="filterSort">Sort By</label><select id="filterSort" name="sort" class="app-filter-select"><option value="">Recommended</option><option value="best_selling"${filterState.sort === 'best_selling' ? ' selected' : ''}>Best Selling</option><option value="newest"${filterState.sort === 'newest' ? ' selected' : ''}>Newest First</option><option value="price_asc"${filterState.sort === 'price_asc' ? ' selected' : ''}>Price Low to High</option><option value="price_desc"${filterState.sort === 'price_desc' ? ' selected' : ''}>Price High to Low</option><option value="alpha_asc"${filterState.sort === 'alpha_asc' ? ' selected' : ''}>A-Z</option><option value="alpha_desc"${filterState.sort === 'alpha_desc' ? ' selected' : ''}>Z-A</option></select></div>
+        <div class="app-filter-group"><span class="app-filter-label">Price Range</span><div class="app-filter-grid"><input type="number" name="minPrice" min="0" placeholder="Min" value="${escapeHtml(String(filterState.minPrice || ''))}" class="app-filter-input"><input type="number" name="maxPrice" min="0" placeholder="Max" value="${escapeHtml(String(filterState.maxPrice || ''))}" class="app-filter-input"></div></div>
+        ${categories.length ? `<div class="app-filter-group"><span class="app-filter-label">Categories</span><div class="app-filter-checklist">${categories.map((category) => `<label class="app-filter-check"><input type="checkbox" name="category" value="${escapeHtml(category.name)}"${Array.isArray(filterState.categories) && filterState.categories.includes(category.name) ? ' checked' : ''}><span>${escapeHtml(category.name)}</span></label>`).join('')}</div></div>` : ''}
+        <div class="app-filter-group"><span class="app-filter-label">Availability</span><div class="app-filter-checklist"><label class="app-filter-check"><input type="radio" name="availability" value=""${!filterState.availability ? ' checked' : ''}><span>All Products</span></label><label class="app-filter-check"><input type="radio" name="availability" value="in_stock"${filterState.availability === 'in_stock' ? ' checked' : ''}><span>In Stock</span></label><label class="app-filter-check"><input type="radio" name="availability" value="out_of_stock"${filterState.availability === 'out_of_stock' ? ' checked' : ''}><span>Out of Stock</span></label></div></div>
+        <div class="app-panel-foot"><div class="app-panel-actions"><button class="btn" type="submit">Apply Filters</button><a class="btn btn-secondary" href="${base}/shop">Reset</a></div></div>
+      </form>
     </aside>`;
   const cartPanel = `
     <aside class="app-side-panel app-side-panel-right" data-panel="cart">
@@ -385,18 +395,18 @@ function renderAppThemeScaffold(store, slug, options) {
       <button class="app-icon-btn ghost" type="button" data-panel-open="menu">☰</button>
       <a class="app-brand-lockup" href="${base || '/'}">${logoBlock}<span>${escapeHtml(store.name)}</span></a>
       <div class="app-actions">
-        <button class="app-icon-btn" type="button" data-panel-open="account">👤</button>
         <button class="app-icon-btn" type="button" data-panel-open="cart">🛒${cartCount ? `<span class="app-badge">${cartCount}</span>` : ''}</button>
       </div>
     </header>`;
   const searchBar = showSearch ? `
     <section class="app-section app-search-section">
       <div class="app-search-shell">
-        <form method="GET" action="${base || '/'}" class="app-search-form">
+        <form method="GET" action="${base}/shop" class="app-search-form" role="search">
           <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"></circle><path d="m21 21-4.35-4.35"></path></svg>
           <input name="search" value="${escapeHtml(search || '')}" placeholder="${escapeHtml((labels && labels.searchBoxText) || 'Search products...')}">
+          <button type="submit" class="app-search-submit" aria-label="Search">Search</button>
         </form>
-        <button class="app-filter-btn" type="button" data-panel-open="menu">☷</button>
+        <button class="app-filter-btn" type="button" data-panel-open="filters">☷</button>
       </div>
     </section>` : '';
   const waLink = floatingWhatsapp && store.whatsapp ? `<a class="app-float-wa" href="https://wa.me/${encodeURIComponent(store.whatsapp)}" target="_blank" rel="noopener">💬</a>` : '';
@@ -411,6 +421,7 @@ function renderAppThemeScaffold(store, slug, options) {
   return `<div class="app-shell app-shell-premium">
     <div class="app-page-overlay" data-panel-overlay></div>
     ${menuPanel}
+    ${filterPanel}
     ${cartPanel}
     ${wishlistPanel}
     ${accountPanel}
@@ -472,6 +483,39 @@ function renderAppThemeScaffold(store, slug, options) {
         variantInputs.forEach(function(input){input.addEventListener('change', sync);});
       });
       root.querySelectorAll('[data-product-thumb]').forEach(function(btn){btn.addEventListener('click',function(){var main=root.querySelector('#appMainProductImg');if(main){main.src=btn.getAttribute('data-product-thumb');}});});
+      root.querySelectorAll('form[action*="/cart/add/"]').forEach(function(form){
+        var btn=form.querySelector('button[type="submit"]');
+        if(!btn || btn.disabled) return;
+        var submitted=false;
+        function lockAndSubmit(e){
+          if(submitted || btn.disabled) return;
+          if(e){e.preventDefault();e.stopPropagation();}
+          submitted=true;
+          btn.disabled=true;
+          btn.dataset.originalLabel=btn.innerHTML;
+          btn.innerHTML='Adding...';
+          form.submit();
+        }
+        form.addEventListener('submit', function(){ if(submitted) return; submitted=true; btn.disabled=true; btn.dataset.originalLabel=btn.innerHTML; btn.innerHTML='Adding...'; });
+        btn.addEventListener('touchend', lockAndSubmit, { passive:false });
+      });
+      root.querySelectorAll('[data-hero-carousel]').forEach(function(shell){
+        var track=shell.querySelector('.app-feature-track');
+        var slides=[].slice.call(shell.querySelectorAll('.app-feature-slide'));
+        var dots=[].slice.call(shell.querySelectorAll('[data-hero-index]'));
+        var arrows=[].slice.call(shell.querySelectorAll('[data-hero-dir]'));
+        if(!track || slides.length < 2) return;
+        var cur=0,timer=null;
+        function go(n){
+          cur=(n+slides.length)%slides.length;
+          track.style.transform='translateX(-'+(cur*100)+'%)';
+          dots.forEach(function(dot,index){dot.classList.toggle('active', index===cur);});
+        }
+        function start(){ if(timer) clearInterval(timer); timer=setInterval(function(){go(cur+1);},3000); }
+        dots.forEach(function(dot){dot.addEventListener('click', function(){go(+dot.getAttribute('data-hero-index')); start();});});
+        arrows.forEach(function(arrow){arrow.addEventListener('click', function(){go(cur + (arrow.getAttribute('data-hero-dir') === 'next' ? 1 : -1)); start();});});
+        start();
+      });
     })();
     </script>
   </div>`;
@@ -506,6 +550,7 @@ function renderAppProductCard(product, options) {
 function renderAppShopAllPage(store, slug, data) {
   const {
     products,
+    categories = [],
     cartCount,
     wishlistCount,
     wishlist,
@@ -517,7 +562,9 @@ function renderAppShopAllPage(store, slug, data) {
     cartDetails = [],
     wishlistItems = [],
     labels,
-    totalProducts
+    totalProducts,
+    sortOptions,
+    filterState
   } = data;
   const base = storeBase !== undefined ? storeBase : '/store/' + encodeURIComponent(slug);
   const productCards = products.map((product) => renderAppProductCard(product, {
@@ -536,10 +583,8 @@ function renderAppShopAllPage(store, slug, data) {
           <h1 class="app-shop-title">Shop All</h1>
         </div>
       </div>
-      <form method="GET" action="${base}/shop" class="app-search-form app-shop-search">
-        <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"></circle><path d="m21 21-4.35-4.35"></path></svg>
-        <input name="search" value="${escapeHtml(search || '')}" placeholder="${escapeHtml((labels && labels.searchBoxText) || 'Search products...')}">
-      </form>
+      <div class="app-search-shell app-shop-search-shell"><form method="GET" action="${base}/shop" class="app-search-form app-shop-search"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"></circle><path d="m21 21-4.35-4.35"></path></svg><input name="search" value="${escapeHtml(search || '')}" placeholder="${escapeHtml((labels && labels.searchBoxText) || 'Search products...')}"><button type="submit" class="app-search-submit" aria-label="Search">Search</button></form><button class="app-filter-btn" type="button" data-panel-open="filters">☷</button></div>
+      ${sortOptions || ''}
       <div class="app-shop-meta">${escapeHtml(String(totalProducts || products.length))} products</div>
     </section>
     <section class="app-section app-shop-grid-wrap">
@@ -555,9 +600,10 @@ function renderAppShopAllPage(store, slug, data) {
     wishlistCount,
     cartDetails,
     wishlistItems,
-    categories: [],
+    categories,
     labels,
     search,
+    filterState,
     activeNav: 'shop',
     content,
     floatingWhatsapp: true,
