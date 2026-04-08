@@ -24,6 +24,7 @@ const adminStyles = `
   .sidebar .nav-link:hover, .sidebar .nav-link.active { background:#eef2ff; color:#3b5bfd; }
   .sidebar .nav-link.active { font-weight:800; }
   .nav-icon { width:18px; display:inline-flex; justify-content:center; color:#64748b; font-size:18px; }
+  .nav-icon svg, .admin-nav-icon svg { width:18px; height:18px; stroke:currentColor; fill:none; stroke-width:1.9; stroke-linecap:round; stroke-linejoin:round; }
   .nav-label { flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .nav-badge { min-width:24px; height:24px; border-radius:999px; background:#ef4444; color:#fff; display:inline-flex; align-items:center; justify-content:center; font-size:12px; font-weight:800; padding:0 7px; }
   .main { margin-left:240px; padding:78px 24px 24px; }
@@ -124,7 +125,117 @@ const adminStyles = `
   .mobile-nav a.active { color:#3b5bfd; background:#eef2ff; }
   .mobile-nav a:hover { background:#f1f5f9; }
   .nav-svg { width:22px; height:22px; stroke-width:1.8; flex-shrink:0; }
+  :root { --admin-sidebar-width:272px; }
+  .admin-topbar { position:fixed; top:0; left:0; right:0; height:56px; background:#fff; border-bottom:1px solid #e5e7eb; display:grid; grid-template-columns:var(--admin-sidebar-width) minmax(0,1fr) auto; align-items:center; z-index:55; }
+  .admin-brand-zone { height:56px; display:flex; align-items:center; gap:12px; padding:0 18px; border-right:1px solid #e5e7eb; }
+  .admin-brand-mark { width:30px; height:30px; border-radius:10px; background:linear-gradient(135deg,#3b82f6,#1d4ed8); color:#fff; display:grid; place-items:center; font-size:14px; font-weight:900; flex:0 0 30px; }
+  .admin-brand-wordmark { font-size:16px; font-weight:800; letter-spacing:-.02em; color:#0f172a; white-space:nowrap; }
+  .admin-topbar-center { display:flex; align-items:center; gap:12px; min-width:0; padding:0 20px; }
+  .admin-store-mark, .admin-store-favicon { width:30px; height:30px; border-radius:10px; background:#eff6ff; display:grid; place-items:center; flex:0 0 30px; }
+  .admin-store-favicon { object-fit:cover; border:1px solid #dbeafe; }
+  .admin-store-meta { min-width:0; display:flex; flex-direction:column; }
+  .admin-store-title { font-size:15px; font-weight:600; color:#111827; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .admin-store-sub { font-size:12px; color:#6b7280; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .admin-topbar-actions { display:flex; align-items:center; gap:10px; padding:0 18px 0 0; }
+  .admin-live-badge { display:inline-flex; align-items:center; gap:8px; padding:4px 10px; border-radius:999px; background:#dcfce7; color:#16a34a; font-size:12px; font-weight:700; }
+  .admin-live-dot { width:8px; height:8px; border-radius:50%; background:#16a34a; position:relative; }
+  .admin-live-dot::after { content:''; position:absolute; inset:-4px; border-radius:999px; background:rgba(22,163,74,.22); animation:adminPulse 1.8s ease-out infinite; }
+  .admin-outline-btn { min-height:36px; padding:0 14px; border-radius:8px; border:1px solid #d1d5db; background:#fff; color:#111827; font-size:13px; font-weight:600; display:inline-flex; align-items:center; justify-content:center; text-decoration:none; transition:background-color .18s ease, border-color .18s ease, transform .18s ease; }
+  .admin-outline-btn:hover { background:#f8fafc; border-color:#cbd5e1; transform:translateY(-1px); }
+  .admin-account-wrap { position:relative; }
+  .admin-account-trigger { width:34px; height:34px; border-radius:999px; border:0; background:#3b82f6; color:#fff; font-size:12px; font-weight:800; display:grid; place-items:center; cursor:pointer; box-shadow:0 8px 18px rgba(59,130,246,.22); }
+  .admin-account-menu { position:absolute; top:44px; right:0; width:240px; border-radius:12px; border:1px solid #e5e7eb; background:#fff; box-shadow:0 8px 24px rgba(0,0,0,.12); padding:8px; opacity:0; transform:translateY(-6px); pointer-events:none; transition:opacity .18s ease, transform .18s ease; }
+  .admin-account-menu.is-open { opacity:1; transform:translateY(0); pointer-events:auto; }
+  .admin-account-email { display:block; padding:10px 12px 8px; color:#9ca3af; font-size:12px; line-height:1.45; }
+  .admin-account-divider { height:1px; background:#e5e7eb; margin:6px 0; }
+  .admin-account-link, .admin-account-menu form button { width:100%; display:flex; align-items:center; gap:10px; min-height:40px; padding:0 12px; border-radius:10px; border:0; background:transparent; color:#111827; font-size:14px; font-weight:600; text-decoration:none; cursor:pointer; text-align:left; }
+  .admin-account-link:hover, .admin-account-menu form button:hover { background:#f8fafc; }
+  .admin-account-link.danger, .admin-account-menu form button.danger { color:#dc2626; }
+  .admin-sidebar-overlay { position:fixed; inset:0; background:rgba(15,23,42,.45); z-index:51; backdrop-filter:blur(4px); opacity:0; transition:opacity .3s ease; pointer-events:none; }
+  .admin-sidebar { position:fixed; top:56px; left:0; width:var(--admin-sidebar-width); height:calc(100vh - 56px); background:#fff; border-right:1px solid #e5e7eb; padding:10px 12px 18px; overflow-y:auto; z-index:44; }
+  .admin-nav-section + .admin-nav-section { margin-top:10px; padding-top:10px; border-top:1px solid #e5e7eb; }
+  .admin-nav-section-title { padding:16px 16px 6px; font-size:11px; font-weight:600; color:#9ca3af; letter-spacing:.8px; text-transform:uppercase; }
+  .admin-nav-link, .admin-nav-summary { width:100%; display:flex; align-items:center; gap:8px; padding:10px 16px; border-radius:8px; border:0; background:transparent; color:#475569; font-size:14px; font-weight:500; text-decoration:none; cursor:pointer; }
+  .admin-nav-link:hover, .admin-nav-summary:hover { background:#f8fafc; color:#111827; }
+  .admin-nav-link.active, .admin-nav-summary.active { background:#eef2ff; color:#3b5bfd; font-weight:700; }
+  .admin-nav-icon { width:18px; height:18px; flex:0 0 18px; display:inline-flex; align-items:center; justify-content:center; font-size:18px; }
+  .admin-nav-label { flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .admin-nav-badge { min-width:22px; height:22px; border-radius:999px; background:#ef4444; color:#fff; display:inline-flex; align-items:center; justify-content:center; font-size:11px; font-weight:800; padding:0 6px; }
+  .admin-nav-collapsible { display:grid; gap:4px; }
+  .admin-nav-collapsible summary { list-style:none; }
+  .admin-nav-collapsible summary::-webkit-details-marker { display:none; }
+  .admin-nav-arrow { width:16px; flex:0 0 16px; color:#94a3b8; transition:transform .3s ease; }
+  .admin-nav-collapsible[open] .admin-nav-arrow { transform:rotate(180deg); }
+  .admin-nav-submenu-shell { display:grid; grid-template-rows:0fr; transition:grid-template-rows .3s ease; }
+  .admin-nav-collapsible[open] .admin-nav-submenu-shell { grid-template-rows:1fr; }
+  .admin-nav-submenu { overflow:hidden; margin:4px 0 8px 16px; padding-left:12px; border-left:2px solid #e5e7eb; display:grid; gap:2px; }
+  .admin-nav-sublink { padding:8px 12px; border-radius:8px; color:#64748b; font-size:13px; font-weight:500; text-decoration:none; }
+  .admin-nav-sublink:hover { background:#f8fafc; color:#111827; }
+  .admin-nav-sublink.active { background:#eef2ff; color:#3b5bfd; font-weight:700; }
+  .admin-main { margin-left:var(--admin-sidebar-width); padding:76px 24px 24px; }
+  @keyframes adminPulse { from { transform:scale(.8); opacity:.7; } to { transform:scale(1.8); opacity:0; } }
+  @media (max-width: 820px) {
+    .admin-topbar { grid-template-columns:auto minmax(0,1fr) auto; padding:0 12px; }
+    .admin-brand-zone { width:auto; min-width:0; padding:0 10px 0 0; border-right:0; }
+    .admin-topbar-center { padding:0 10px; }
+    .admin-topbar-actions { padding:0; gap:8px; }
+    .admin-store-sub, .admin-live-badge, .admin-outline-btn { display:none; }
+    .admin-sidebar { top:0; left:0; width:294px; height:100vh; transform:translateX(-100%); z-index:52; box-shadow:none; padding-top:18px; transition:transform .3s cubic-bezier(.4,0,.2,1), box-shadow .3s ease; }
+    body.sidebar-open .admin-sidebar { transform:translateX(0); box-shadow:8px 0 30px rgba(0,0,0,.15); }
+    body.sidebar-open .admin-sidebar-overlay { opacity:1; pointer-events:auto; }
+    .admin-main { margin-left:0; padding:68px 16px 100px; }
+  }
   `;
+
+function getInitials(value) {
+  const words = String(value || '').trim().split(/\s+/).filter(Boolean);
+  if (!words.length) return 'SB';
+  return words.slice(0, 2).map((word) => word.charAt(0).toUpperCase()).join('');
+}
+
+function renderAdminIcon(icon) {
+  const iconMap = {
+    dashboard: '<svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="11" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="17" width="7" height="4" rx="1.5"/></svg>',
+    analytics: '<svg viewBox="0 0 24 24"><path d="M4 19h16"/><path d="M7 16V9"/><path d="M12 16V5"/><path d="M17 16v-3"/></svg>',
+    'system-status': '<svg viewBox="0 0 24 24"><path d="M12 2v4"/><path d="M12 18v4"/><path d="m4.93 4.93 2.83 2.83"/><path d="m16.24 16.24 2.83 2.83"/><path d="M2 12h4"/><path d="M18 12h4"/><path d="m4.93 19.07 2.83-2.83"/><path d="m16.24 7.76 2.83-2.83"/><circle cx="12" cy="12" r="3"/></svg>',
+    products: '<svg viewBox="0 0 24 24"><path d="M6 7 12 4l6 3"/><path d="M6 7v10l6 3 6-3V7"/><path d="M12 10v10"/></svg>',
+    categories: '<svg viewBox="0 0 24 24"><rect x="3" y="3" width="8" height="8" rx="1.5"/><rect x="13" y="3" width="8" height="5" rx="1.5"/><rect x="13" y="10" width="8" height="11" rx="1.5"/><rect x="3" y="13" width="8" height="8" rx="1.5"/></svg>',
+    collections: '<svg viewBox="0 0 24 24"><path d="M4 7h16"/><path d="M4 12h16"/><path d="M4 17h16"/><path d="M7 4v16"/></svg>',
+    media: '<svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m21 16-5-5L5 20"/></svg>',
+    'bulk-upload': '<svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 20h16"/></svg>',
+    orders: '<svg viewBox="0 0 24 24"><path d="M6 2h9l5 5v15H6z"/><path d="M15 2v5h5"/><path d="M9 12h6"/><path d="M9 16h6"/></svg>',
+    customers: '<svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2"/><circle cx="10" cy="7" r="4"/><path d="M21 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>',
+    leads: '<svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="M8 9h8"/><path d="M8 13h5"/></svg>',
+    abandoned: '<svg viewBox="0 0 24 24"><circle cx="9" cy="20" r="1"/><circle cx="18" cy="20" r="1"/><path d="M3 4h2l2.2 10.4a2 2 0 0 0 2 1.6h7.9a2 2 0 0 0 2-1.6L22 7H7"/></svg>',
+    coupons: '<svg viewBox="0 0 24 24"><path d="M4 8a2 2 0 0 1 2-2h12l2 2v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2Z"/><path d="M9 6v12"/><path d="m14 9 3 3-3 3"/></svg>',
+    payments: '<svg viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/><path d="M6 15h2"/></svg>',
+    shipping: '<svg viewBox="0 0 24 24"><path d="M3 7h11v8H3z"/><path d="M14 10h3l3 3v2h-6z"/><circle cx="7.5" cy="18.5" r="1.5"/><circle cx="17.5" cy="18.5" r="1.5"/></svg>',
+    tax: '<svg viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v5h5"/><path d="M9 13h6"/><path d="M9 17h6"/></svg>',
+    themes: '<svg viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 9 9c0-1.1-.9-2-2-2h-2a2 2 0 0 1-2-2V6a3 3 0 0 0-3-3Z"/></svg>',
+    display: '<svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8"/><path d="M12 16v4"/></svg>',
+    pages: '<svg viewBox="0 0 24 24"><path d="M6 2h9l5 5v15H6z"/><path d="M14 2v5h5"/></svg>',
+    settings: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 .6 1.7 1.7 0 0 1-2 0 1.7 1.7 0 0 0-1-.6 1.7 1.7 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-.6-1 1.7 1.7 0 0 1 0-2 1.7 1.7 0 0 0 .6-1 1.7 1.7 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-.6 1.7 1.7 0 0 1 2 0 1.7 1.7 0 0 0 1 .6 1.7 1.7 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.4 9c0 .38.14.74.4 1a1.7 1.7 0 0 1 0 2c-.26.26-.4.62-.4 1Z"/></svg>',
+    apps: '<svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/></svg>',
+    whatsapp: '<svg viewBox="0 0 24 24"><path d="M20 11.5A8.5 8.5 0 0 1 7.4 18.9L4 20l1.1-3.2A8.5 8.5 0 1 1 20 11.5Z"/><path d="M9 8.5c.3-.7.6-.7.9-.7h.8c.3 0 .7.1.9.7.2.6.7 1.8.8 1.9.1.2.1.4 0 .6-.1.2-.2.4-.4.6-.2.2-.3.4-.5.5-.2.2-.3.4-.1.8.2.3.8 1.3 1.7 2 .9.7 1.6.9 2 .9.3 0 .5-.2.7-.4.2-.2.7-.8.9-1.1.2-.3.4-.3.7-.2.3.1 1.7.8 2 .9.3.2.5.2.5.4 0 .2-.1 1-.7 1.5-.6.5-1.4.8-2 .9-.5 0-1.2.1-2.9-.6-2-.8-3.4-2.9-3.5-3-.1-.2-1-1.3-1-2.5 0-1.2.6-1.8.8-2.1Z"/></svg>',
+    tracking: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 3"/></svg>',
+    notifications: '<svg viewBox="0 0 24 24"><path d="M15 17h5l-1.4-1.4A2 2 0 0 1 18 14.2V11a6 6 0 1 0-12 0v3.2a2 2 0 0 1-.6 1.4L4 17h5"/><path d="M10 17a2 2 0 0 0 4 0"/></svg>',
+    domain: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3a15 15 0 0 1 0 18"/><path d="M12 3a15 15 0 0 0 0 18"/></svg>',
+    vendors: '<svg viewBox="0 0 24 24"><path d="M3 10h18"/><path d="M5 10V6l7-3 7 3v4"/><path d="M6 10v8"/><path d="M10 10v8"/><path d="M14 10v8"/><path d="M18 10v8"/><path d="M3 18h18"/></svg>',
+    stores: '<svg viewBox="0 0 24 24"><path d="M3 9h18"/><path d="M5 9V5h14v4"/><path d="M4 9v10h16V9"/><path d="M9 19v-5h6v5"/></svg>',
+    users: '<svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2"/><circle cx="10" cy="7" r="4"/></svg>',
+    logout: '<svg viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>'
+  };
+  return iconMap[String(icon || '').trim()] || '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/></svg>';
+}
+
+function renderAdminSidebarLink(item, activeKey, pendingOrderCount) {
+  const active = activeKey === item.key ? 'active' : '';
+  return `<a class="admin-nav-link ${active}" href="${escapeHtml(item.href)}"><span class="admin-nav-icon">${renderAdminIcon(item.icon)}</span><span class="admin-nav-label">${escapeHtml(item.label)}</span>${item.key === 'orders' && pendingOrderCount > 0 ? `<span class="admin-nav-badge">${escapeHtml(String(pendingOrderCount))}</span>` : ''}</a>`;
+}
+
+function renderAdminSidebarCollapsible(title, icon, isOpen, links) {
+  return `<details class="admin-nav-collapsible"${isOpen ? ' open' : ''}><summary class="admin-nav-summary ${isOpen ? 'active' : ''}"><span class="admin-nav-icon">${renderAdminIcon(icon)}</span><span class="admin-nav-label">${escapeHtml(title)}</span><span class="admin-nav-arrow">⌄</span></summary><div class="admin-nav-submenu-shell"><div class="admin-nav-submenu">${links}</div></div></details>`;
+}
 
 function renderAdminLayout(req, title, activeKey, content, extraStylesOverride) {
   const store = req.currentStore;
@@ -132,79 +243,132 @@ function renderAdminLayout(req, title, activeKey, content, extraStylesOverride) 
   const pageExtraStyles = extraStylesOverride || '';
   const pendingOrderCount = store && store.orders ? store.orders.filter((o) => o.status === 'pending').length : 0;
   const isSuperAdminImpersonating = req.fromSuperAdmin === true;
-  const items = [
-    { section: 'Overview', key: 'dashboard', label: 'Dashboard', href: '/dashboard', icon: '▦' },
-    { section: 'Overview', key: 'analytics', label: 'Analytics', href: '/dashboard/analytics', icon: '⌁' },
-    { section: 'Overview', key: 'system-status', label: 'System Status', href: '/dashboard/system-status', icon: '◉' },
-    { section: 'Catalog', key: 'products', label: 'Products', href: '/dashboard/products', icon: '◫' },
-    { section: 'Catalog', key: 'categories', label: 'Categories', href: '/dashboard/categories', icon: '◳' },
-    { section: 'Catalog', key: 'media', label: 'Media Library', href: '/dashboard/media', icon: '◴' },
-    { section: 'Catalog', key: 'bulk-upload', label: 'Bulk Upload', href: '/dashboard/bulk-upload', icon: '⇪' },
-    { section: 'Sales & Customers', key: 'orders', label: 'Orders', href: '/dashboard/orders', icon: '⟡' },
-    { section: 'Sales & Customers', key: 'customers', label: 'Customers', href: '/dashboard/customers', icon: '◔' },
-    { section: 'Sales & Customers', key: 'leads', label: 'Leads', href: '/dashboard/leads', icon: '◌' },
-    { section: 'Sales & Customers', key: 'abandoned', label: 'Abandoned Carts', href: '/dashboard/abandoned-carts', icon: '⌂' },
-    { section: 'Payments & Shipping', key: 'payments', label: 'Payments', href: '/dashboard/payments', icon: '₪' },
-    { section: 'Payments & Shipping', key: 'coupons', label: 'Coupons', href: '/dashboard/coupons', icon: '✦' },
-    { section: 'Payments & Shipping', key: 'shipping', label: 'Shipping', href: '/dashboard/shipping', icon: '⇄' },
-    { section: 'Payments & Shipping', key: 'tax', label: 'Tax / GST', href: '/dashboard/tax', icon: '₹' },
-    { section: 'Marketing', key: 'whatsapp-marketing', label: 'WhatsApp Marketing', href: '/dashboard/whatsapp-marketing', icon: '◎' },
-    { section: 'Marketing', key: 'tracking', label: 'Tracking & Analytics', href: '/dashboard/tracking', icon: '▣' },
-    { section: 'Marketing', key: 'apps', label: 'App Store', href: '/dashboard/apps', icon: '◫' },
-    { section: 'Appearance & Settings', key: 'theme', label: 'Themes', href: '/dashboard/theme', icon: '◐' },
-    { section: 'Appearance & Settings', key: 'display-settings', label: 'Display Settings', href: '/dashboard/display-settings', icon: '▥' },
-    { section: 'Appearance & Settings', key: 'pages', label: 'Store Pages', href: '/dashboard/pages', icon: '▤' },
-    { section: 'Appearance & Settings', key: 'domain', label: 'Domain', href: '/dashboard/domain', icon: '◈' },
-    { section: 'Appearance & Settings', key: 'settings', label: 'Store Settings', href: '/dashboard/settings?section=store-details', icon: '⚙' },
-    { section: 'Account', key: 'store', label: 'View Store', href: `/store/${store.slug}`, icon: '↗' },
-    { section: 'Account', key: 'logout', label: 'Sign out', href: '/logout', icon: '⎋' }
+  const settings = ensureStoreSettings(store);
+  const activeDisplaySection = activeKey === 'display-settings' ? pickDisplaySection(req.query && req.query.section) : '';
+  const activeStoreSection = activeKey === 'settings' ? pickStoreSettingsSection(req.query && req.query.section) : '';
+  const storeMark = settings.storeDetails && settings.storeDetails.favicon
+    ? `<img class="admin-store-favicon" src="${escapeHtml(settings.storeDetails.favicon)}" alt="${escapeHtml(store.name)}">`
+    : (store.logo ? `<img class="admin-store-favicon" src="${escapeHtml(store.logo)}" alt="${escapeHtml(store.name)}">` : '<span class="admin-store-mark">🏪</span>');
+  const profileInitials = getInitials(store.name || req.currentUser.name || req.currentUser.email);
+  const displayLinks = DISPLAY_SETTINGS_SECTIONS.map((item) => `<a class="admin-nav-sublink ${activeDisplaySection === item.id ? 'active' : ''}" href="/dashboard/display-settings?section=${encodeURIComponent(item.id)}">${escapeHtml(item.label)}</a>`).join('');
+  const settingsLinks = STORE_SETTINGS_SECTIONS.map((item) => `<a class="admin-nav-sublink ${activeStoreSection === item.id ? 'active' : ''}" href="/dashboard/settings?section=${encodeURIComponent(item.id)}">${escapeHtml(item.label)}</a>`).join('');
+  const navSections = [
+    {
+      title: 'Overview',
+      content: [
+        { key: 'dashboard', label: 'Dashboard', href: '/dashboard', icon: 'dashboard' },
+        { key: 'analytics', label: 'Analytics', href: '/dashboard/analytics', icon: 'analytics' },
+        { key: 'system-status', label: 'System Status', href: '/dashboard/system-status', icon: 'system-status' }
+      ].map((item) => renderAdminSidebarLink(item, activeKey, pendingOrderCount)).join('')
+    },
+    {
+      title: 'Catalog',
+      content: [
+        { key: 'products', label: 'Products', href: '/dashboard/products', icon: 'products' },
+        { key: 'categories', label: 'Categories', href: '/dashboard/categories', icon: 'categories' },
+        { key: 'collections', label: 'Collections', href: '/dashboard/collections', icon: 'collections' },
+        { key: 'media', label: 'Media', href: '/dashboard/media', icon: 'media' },
+        { key: 'bulk-upload', label: 'Bulk Upload', href: '/dashboard/bulk-upload', icon: 'bulk-upload' }
+      ].map((item) => renderAdminSidebarLink(item, activeKey, pendingOrderCount)).join('')
+    },
+    {
+      title: 'Sales',
+      content: [
+        { key: 'orders', label: 'Orders', href: '/dashboard/orders', icon: 'orders' },
+        { key: 'customers', label: 'Customers', href: '/dashboard/customers', icon: 'customers' },
+        { key: 'leads', label: 'Leads', href: '/dashboard/leads', icon: 'leads' },
+        { key: 'abandoned', label: 'Abandoned', href: '/dashboard/abandoned-carts', icon: 'abandoned' },
+        { key: 'coupons', label: 'Coupons', href: '/dashboard/coupons', icon: 'coupons' }
+      ].map((item) => renderAdminSidebarLink(item, activeKey, pendingOrderCount)).join('')
+    },
+    {
+      title: 'Finance & Logistics',
+      content: [
+        { key: 'payments', label: 'Payments', href: '/dashboard/payments', icon: 'payments' },
+        { key: 'shipping', label: 'Shipping', href: '/dashboard/shipping', icon: 'shipping' },
+        { key: 'tax', label: 'Tax', href: '/dashboard/tax', icon: 'tax' }
+      ].map((item) => renderAdminSidebarLink(item, activeKey, pendingOrderCount)).join('')
+    },
+    {
+      title: 'Store Design',
+      content: [
+        renderAdminSidebarLink({ key: 'theme', label: 'Themes', href: '/dashboard/theme', icon: 'themes' }, activeKey, pendingOrderCount),
+        renderAdminSidebarCollapsible('Display', 'display', activeKey === 'display-settings', displayLinks),
+        renderAdminSidebarLink({ key: 'pages', label: 'Pages', href: '/dashboard/pages', icon: 'pages' }, activeKey, pendingOrderCount)
+      ].join('')
+    },
+    {
+      title: 'Settings',
+      content: renderAdminSidebarCollapsible('Settings', 'settings', activeKey === 'settings', settingsLinks)
+    },
+    {
+      title: 'Tools',
+      content: [
+        { key: 'apps', label: 'Apps', href: '/dashboard/apps', icon: 'apps' },
+        { key: 'whatsapp-marketing', label: 'WhatsApp', href: '/dashboard/whatsapp-marketing', icon: 'whatsapp' },
+        { key: 'tracking', label: 'Tracking', href: '/dashboard/tracking', icon: 'tracking' },
+        { key: 'notifications', label: 'Notifications', href: '/dashboard/notifications', icon: 'notifications' },
+        { key: 'domain', label: 'Domain', href: '/dashboard/domain', icon: 'domain' }
+      ].map((item) => renderAdminSidebarLink(item, activeKey, pendingOrderCount)).join('')
+    }
   ];
-  const grouped = items.reduce((acc, item) => {
-    if (!acc[item.section]) acc[item.section] = [];
-    acc[item.section].push(item);
-    return acc;
-  }, {});
-  const sidebar = Object.entries(grouped).map(([section, links]) => `
-    <div class="nav-section">
-      <div class="nav-section-title">${escapeHtml(section)}</div>
-      ${links.map((item) => {
-        const active = activeKey === item.key ? 'active' : '';
-        const target = item.key === 'store' ? ' target="_blank" rel="noopener noreferrer"' : '';
-        if (item.key === 'logout') {
-          return `<form method="POST" action="/logout" style="margin:0;"><button class="nav-link ${active}" type="submit" style="width:100%;border:0;background:transparent;"><span class="nav-icon">${escapeHtml(item.icon || '•')}</span><span class="nav-label">${escapeHtml(item.label)}</span></button></form>`;
-        }
-        return `<a class="nav-link ${active}" href="${escapeHtml(item.href)}"${target}><span class="nav-icon">${escapeHtml(item.icon || '•')}</span><span class="nav-label">${escapeHtml(item.label)}</span>${item.key === 'orders' && pendingOrderCount > 0 ? `<span class="nav-badge">${escapeHtml(String(pendingOrderCount))}</span>` : ''}</a>`;
-      }).join('')}
-    </div>
-  `).join('');
+  const sidebar = navSections.map((section) => `<div class="admin-nav-section"><div class="admin-nav-section-title">${escapeHtml(section.title)}</div>${section.content}</div>`).join('');
   return renderHtmlShell(title, `
-<div class="topbar">
-  <div class="topbar-left">
+<div class="admin-topbar">
+  <div class="admin-brand-zone">
     <button class="hamburger" onclick="document.body.classList.toggle('sidebar-open')" aria-label="Menu">
       <span></span><span></span><span></span>
     </button>
-    <div class="brand"><strong>MyShop</strong>Builder</div>
-    <div class="topbar-store">
-      <div class="topbar-name">${escapeHtml(store.name)}</div>
-      <div class="topbar-sub">/${escapeHtml(store.slug)} · ${escapeHtml(req.currentUser.email)}</div>
+    <div class="admin-brand-mark">S</div>
+    <div class="admin-brand-wordmark">StoreBanao</div>
+  </div>
+  <div class="admin-topbar-center">
+    ${storeMark}
+    <div class="admin-store-meta">
+      <div class="admin-store-title">${escapeHtml(store.name)}</div>
+      <div class="admin-store-sub">/${escapeHtml(store.slug)}</div>
     </div>
   </div>
-  <div class="topbar-actions">
-    ${isSuperAdminImpersonating ? '<form method="POST" action="/superadmin/return-from-vendor" style="margin:0;"><button class="btn btn-danger" type="submit" style="background:#dc2626;color:#fff;border-color:#dc2626;">← Return to Super Admin</button></form>' : '<span class="topbar-pill"><span class="topbar-dot"></span> Live store</span>'}
-    <a class="btn btn-secondary" href="/dashboard/analytics">Purge Cache</a>
-    <a class="btn btn-secondary" href="/store/${escapeHtml(store.slug)}" target="_blank" rel="noopener noreferrer">View store</a>
+  <div class="admin-topbar-actions">
+    ${isSuperAdminImpersonating ? '<form method="POST" action="/superadmin/return-from-vendor" style="margin:0;"><button class="admin-outline-btn" type="submit">Return to Super Admin</button></form>' : ''}
+    <span class="admin-live-badge"><span class="admin-live-dot"></span><span>Live</span></span>
+    <a class="admin-outline-btn" href="/store/${escapeHtml(store.slug)}" target="_blank" rel="noopener noreferrer">View Store</a>
+    <div class="admin-account-wrap" data-admin-account>
+      <button class="admin-account-trigger" type="button" aria-label="Account menu" data-admin-account-trigger>${escapeHtml(profileInitials)}</button>
+      <div class="admin-account-menu" data-admin-account-menu>
+        <span class="admin-account-email">${escapeHtml(req.currentUser.email)}</span>
+        <a class="admin-account-link" href="/dashboard/settings?section=store-details">My Profile</a>
+        <a class="admin-account-link" href="/dashboard/theme">Billing Plans</a>
+        <a class="admin-account-link" href="mailto:support@storebanao.com?subject=${encodeURIComponent(`Help for ${store.slug}`)}">Help &amp; Support</a>
+        <div class="admin-account-divider"></div>
+        <form method="POST" action="/logout"><button class="danger" type="submit">Sign Out</button></form>
+      </div>
+    </div>
   </div>
 </div>
-<div class="sidebar-overlay" onclick="document.body.classList.remove('sidebar-open')"></div>
-<nav class="sidebar">${sidebar}</nav>
-<main class="main admin-shell">${flash}<div class="content-wrap">${content}</div></main>
+<div class="admin-sidebar-overlay" onclick="document.body.classList.remove('sidebar-open')"></div>
+<nav class="admin-sidebar">${sidebar}</nav>
+<main class="admin-main admin-shell">${flash}<div class="content-wrap">${content}</div></main>
 <nav class="mobile-nav">
   <a href="/dashboard"${activeKey === 'dashboard' ? ' class="active"' : ''}><svg class="nav-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg><span>Home</span></a>
   <a href="/dashboard/orders"${activeKey === 'orders' ? ' class="active"' : ''}><svg class="nav-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg><span>Orders</span></a>
   <a href="/dashboard/products"${activeKey === 'products' ? ' class="active"' : ''}><svg class="nav-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg><span>Products</span></a>
   <a href="/dashboard/categories"${activeKey === 'categories' ? ' class="active"' : ''}><svg class="nav-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg><span>Categories</span></a>
   <a href="/dashboard/apps"${activeKey === 'apps' ? ' class="active"' : ''}><svg class="nav-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg><span>Apps</span></a>
-</nav>`, { extraStyles: adminStyles + pageExtraStyles });
+</nav>
+<script>
+  (function(){
+    var shell=document.querySelector('[data-admin-account]');
+    if(!shell)return;
+    var trigger=shell.querySelector('[data-admin-account-trigger]');
+    var menu=shell.querySelector('[data-admin-account-menu]');
+    if(!trigger||!menu)return;
+    function closeMenu(){ menu.classList.remove('is-open'); }
+    trigger.addEventListener('click', function(e){ e.preventDefault(); e.stopPropagation(); menu.classList.toggle('is-open'); });
+    document.addEventListener('click', function(e){ if(!shell.contains(e.target)) closeMenu(); });
+    document.addEventListener('keydown', function(e){ if(e.key==='Escape') closeMenu(); });
+  })();
+</script>`, { extraStyles: adminStyles + pageExtraStyles });
 }
 
 const DISPLAY_SETTINGS_SECTIONS = [
@@ -504,18 +668,18 @@ function renderOnlineStoreAdminLayout(req, title, activeKey, content) {
 function renderSuperAdminLayout(req, title, activeKey, content) {
   const flash = renderFlashMessages(req);
   const items = [
-    { key: 'dashboard', label: 'Dashboard', href: '/superadmin/dashboard', icon: '▦' },
-    { key: 'vendors', label: 'Vendors', href: '/superadmin/vendors', icon: '◉' },
-    { key: 'stores', label: 'Stores', href: '/superadmin/stores', icon: '◫' },
-    { key: 'users', label: 'Users', href: '/superadmin/users', icon: '◔' },
-    { key: 'logout', label: 'Logout', href: '/superadmin/logout', icon: '⎋' }
+    { key: 'dashboard', label: 'Dashboard', href: '/superadmin/dashboard', icon: 'dashboard' },
+    { key: 'vendors', label: 'Vendors', href: '/superadmin/vendors', icon: 'vendors' },
+    { key: 'stores', label: 'Stores', href: '/superadmin/stores', icon: 'stores' },
+    { key: 'users', label: 'Users', href: '/superadmin/users', icon: 'users' },
+    { key: 'logout', label: 'Logout', href: '/superadmin/logout', icon: 'logout' }
   ];
   const sidebar = items.map((item) => {
     const active = activeKey === item.key ? 'active' : '';
     if (item.key === 'logout') {
-      return `<form method="POST" action="/superadmin/logout" style="margin:0;"><button class="nav-link ${active}" type="submit" style="width:100%;border:0;background:transparent;"><span class="nav-icon">${escapeHtml(item.icon)}</span><span class="nav-label">${escapeHtml(item.label)}</span></button></form>`;
+      return `<form method="POST" action="/superadmin/logout" style="margin:0;"><button class="nav-link ${active}" type="submit" style="width:100%;border:0;background:transparent;"><span class="nav-icon">${renderAdminIcon(item.icon)}</span><span class="nav-label">${escapeHtml(item.label)}</span></button></form>`;
     }
-    return `<a class="nav-link ${active}" href="${escapeHtml(item.href)}"><span class="nav-icon">${escapeHtml(item.icon)}</span><span class="nav-label">${escapeHtml(item.label)}</span></a>`;
+    return `<a class="nav-link ${active}" href="${escapeHtml(item.href)}"><span class="nav-icon">${renderAdminIcon(item.icon)}</span><span class="nav-label">${escapeHtml(item.label)}</span></a>`;
   }).join('');
   return renderHtmlShell(title, `
 <div class="topbar">
