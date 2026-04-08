@@ -2,34 +2,9 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Link, NavLink, Navigate, Route, Routes, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { api, API_URL } from './api';
 import { useAuth } from './auth';
-
-const DASHBOARD_LINKS = [
-  { key: 'dashboard', label: 'Dashboard', href: '/dashboard', icon: '▦' },
-  { key: 'analytics', label: 'Analytics', href: '/dashboard/analytics', icon: '⌁' },
-  { key: 'system-status', label: 'System Status', href: '/dashboard/system-status', icon: '◉' },
-  { key: 'products', label: 'Products', href: '/dashboard/products', icon: '◫' },
-  { key: 'categories', label: 'Categories', href: '/dashboard/categories', icon: '◳' },
-  { key: 'collections', label: 'Collections', href: '/dashboard/collections', icon: '◈' },
-  { key: 'media', label: 'Media', href: '/dashboard/media', icon: '◴' },
-  { key: 'bulk-upload', label: 'Bulk Upload', href: '/dashboard/bulk-upload', icon: '⇪' },
-  { key: 'orders', label: 'Orders', href: '/dashboard/orders', icon: '⟡' },
-  { key: 'customers', label: 'Customers', href: '/dashboard/customers', icon: '◔' }
-  ,{ key: 'leads', label: 'Leads', href: '/dashboard/leads', icon: '◌' }
-  ,{ key: 'abandoned-carts', label: 'Abandoned', href: '/dashboard/abandoned-carts', icon: '⌂' }
-  ,{ key: 'coupons', label: 'Coupons', href: '/dashboard/coupons', icon: '✦' }
-  ,{ key: 'shipping', label: 'Shipping', href: '/dashboard/shipping', icon: '⇄' }
-  ,{ key: 'payments', label: 'Payments', href: '/dashboard/payments', icon: '₪' }
-  ,{ key: 'notifications', label: 'Notifications', href: '/dashboard/notifications', icon: '🔔' }
-  ,{ key: 'tax', label: 'Tax', href: '/dashboard/tax', icon: '₹' }
-  ,{ key: 'whatsapp-marketing', label: 'WhatsApp', href: '/dashboard/whatsapp-marketing', icon: '◎' }
-  ,{ key: 'tracking', label: 'Tracking', href: '/dashboard/tracking', icon: '▣' }
-  ,{ key: 'theme', label: 'Themes', href: '/dashboard/theme', icon: '◐' }
-  ,{ key: 'display-settings', label: 'Display', href: '/dashboard/display-settings', icon: '▥' }
-  ,{ key: 'settings', label: 'Settings', href: '/dashboard/settings', icon: '⚙' }
-  ,{ key: 'apps', label: 'Apps', href: '/dashboard/apps', icon: '◫' }
-  ,{ key: 'pages', label: 'Pages', href: '/dashboard/pages', icon: '▤' }
-  ,{ key: 'domain', label: 'Domain', href: '/dashboard/domain', icon: '◈' }
-];
+import { DASHBOARD_LINKS } from './lib/dashboard-nav';
+import PagesPageView from './pages/dashboard/PagesPage';
+import BuilderHomePageView from './pages/dashboard/BuilderHomePage';
 
 const SUPERADMIN_LINKS = [
   { key: 'dashboard', label: 'Dashboard', href: '/superadmin/dashboard', icon: '▦' },
@@ -1771,7 +1746,8 @@ export default function App() {
       <Route path="/dashboard/whatsapp-marketing" element={<DashboardWhatsappMarketingPage />} />
       <Route path="/dashboard/tracking" element={<DashboardTrackingPage />} />
       <Route path="/dashboard/apps" element={<DashboardAppsPage />} />
-      <Route path="/dashboard/pages" element={<DashboardPagesPage />} />
+      <Route path="/dashboard/pages" element={<PagesPageView />} />
+      <Route path="/dashboard/builder/home" element={<BuilderHomePageView />} />
       <Route path="/dashboard/domain" element={<DashboardDomainPage />} />
       <Route path="/store/:slug" element={<StorePage />} />
       <Route path="/store/:slug/page/:pageSlug" element={<StoreContentPage />} />

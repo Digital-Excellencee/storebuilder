@@ -2,14 +2,15 @@
 const router = express.Router();
 const fs = require('fs');
 const path = require('path');
-const { loadDB, saveDB, ensureStoreSettings, removeStoredFile, saveUploadedFile, runUploader, DEFAULT_TEMPLATES, recordStoreVisit, findStoreCustomerByEmail, saveStoreCustomerFast } = require('../services/db');
+const { loadDB, saveDB, ensureStoreSettings, removeStoredFile, saveUploadedFile, runUploader, DEFAULT_TEMPLATES, recordStoreVisit, findStoreCustomerByEmail, saveStoreCustomerFast, getPublishedStoreBuilderPage } = require('../services/db');
 const { hashPassword, verifyPassword } = require('../services/password');
 const { escapeHtml, slugify, formatDate, formatMoney, parsePrice, sanitizePhone, generateId, generateTrackingCode, generateOrderNumber, getBaseUrl, sanitizeInput } = require('../helpers/html');
 const { validateEmail } = require('../helpers/validation');
 const { setFlash, renderFlashMessages } = require('../helpers/flash');
 const { getStatusBadge, getTemplateById, applyRoundingMode, getEffectiveShippingFee, getProductDisplayRating } = require('../helpers/store');
 const { renderStoreCss, getThemeCSS } = require('../views/store-css');
-const { renderStoreByTheme, renderAppProductPage, renderAppShopAllPage, renderAppCategoriesPage } = require('../views/store-themes');
+const { renderStoreByTheme, renderAppProductPage, renderAppShopAllPage, renderAppCategoriesPage, renderAppBuilderStore } = require('../views/store-themes');
+const { renderStoreBuilderPage } = require('../views/store-builder');
 const { renderGlobalError } = require('../views/error-views');
 const { renderHtmlShell } = require('../views/shell');
 const { getStoreMetaTags, getRobotsTxt, resolveStoreRedirect } = require('../views/store-components');
@@ -487,7 +488,11 @@ router.get('/:slug', route(async (req, res) => {
   const storeBase = isSubdomain ? '' : '/store/' + encodeURIComponent(slug);
   const sortOptions = renderListingSortOptions(storeBase || '/', { search, selectedCategories, sort, minPrice, maxPrice, availability });
   const paginationHtml = totalPages > 1 ? `<div style="display:flex;gap:8px;justify-content:center;padding:20px 0;flex-wrap:wrap;">${Array.from({ length: totalPages }, (_, i) => `<a href="${storeBase || '/'}${buildListingQuery({ page: i + 1, search, category: selectedCategories, sort, minPrice, maxPrice, availability })}" style="padding:8px 14px;border-radius:999px;background:${page === i + 1 ? (cfg.primaryColor || '#3b5bfd') : '#fff'};color:${page === i + 1 ? '#fff' : '#333'};border:1px solid #e2e8f0;font-size:13px;font-weight:700;text-decoration:none;">${i + 1}</a>`).join('')}</div>` : '';
-  const storeContent = renderStoreByTheme(currentTemplate, store, slug, { products: pagedProducts, categories, cartCount, wishlistCount, wishlist, search, selectedCategory: selectedCategories[0] || '', selectedCategories, currentTemplate, customer, cfg, isDark, sortOptions, paginationHtml, isSubdomain, storeBase, req, cartDetails, wishlistItems, featuredProduct: visibleProducts[0] || store.products.find((item) => item.active !== false), filterState: { search, categories: selectedCategories, sort, minPrice, maxPrice, availability } });
+  const publishedBuilder = (currentTemplate && currentTemplate.layout) === 'app' ? await getPublishedStoreBuilderPage(slug, 'home') : null;
+  const publishedBuilderPage = publishedBuilder && publishedBuilder.snapshot ? publishedBuilder.snapshot.schemaJson : null;
+  const storeContent = publishedBuilderPage
+    ? renderStoreBuilderPage(store, slug, publishedBuilderPage, { products: pagedProducts, categories, cartCount, wishlistCount, wishlist, search, selectedCategory: selectedCategories[0] || '', selectedCategories, currentTemplate, customer, cfg, isDark, sortOptions, paginationHtml, isSubdomain, storeBase, req, cartDetails, wishlistItems, featuredProduct: visibleProducts[0] || store.products.find((item) => item.active !== false), filterState: { search, categories: selectedCategories, sort, minPrice, maxPrice, availability } })
+    : renderStoreByTheme(currentTemplate, store, slug, { products: pagedProducts, categories, cartCount, wishlistCount, wishlist, search, selectedCategory: selectedCategories[0] || '', selectedCategories, currentTemplate, customer, cfg, isDark, sortOptions, paginationHtml, isSubdomain, storeBase, req, cartDetails, wishlistItems, featuredProduct: visibleProducts[0] || store.products.find((item) => item.active !== false), filterState: { search, categories: selectedCategories, sort, minPrice, maxPrice, availability } });
   res.send(renderHtmlShell(`${store.name} - Store`, `<div class="store-page"><div class="store-wrap">${storeContent}</div></div>`, getStoreShellOptions(req, store, { extraStyles: themeCSS, metaTags: getStoreMetaTags(store, { title: ss.seoSettings.title || `${store.name} - Store`, description: ss.seoSettings.description || store.description }) }))); 
 }));
 
