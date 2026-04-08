@@ -6,7 +6,9 @@ const { createClient } = require('@supabase/supabase-js');
 const { v2: cloudinary } = require('cloudinary');
 const config = require('../config');
 const { escapeHtml, parsePrice, generateId, generateTrackingCode } = require('../helpers/html');
+const { createDefaultHomePageSchema, normalizeBuilderSchema, validateBuilderSchema, cloneBuilderValue } = require('../helpers/builder-schema');
 const { normalizeStoreApps } = require('./apps');
+const { ensureStoreBuilderState } = require('./builder');
 
 let _supabase = null;
 let _cloudinaryClient;
@@ -161,7 +163,35 @@ const SCHEMA_SQL_STATEMENTS = [
     value JSONB NOT NULL,
     updated_at TIMESTAMPTZ DEFAULT NOW()
   );`,
-  `CREATE INDEX IF NOT EXISTS customers_store_slug_email_idx ON customers(store_slug, email);`
+  `CREATE INDEX IF NOT EXISTS customers_store_slug_email_idx ON customers(store_slug, email);`,
+  `CREATE TABLE IF NOT EXISTS store_pages (
+    id TEXT PRIMARY KEY,
+    store_slug TEXT NOT NULL REFERENCES stores(slug) ON DELETE CASCADE,
+    page_key TEXT NOT NULL,
+    page_type TEXT NOT NULL DEFAULT 'builder',
+    title TEXT DEFAULT '',
+    slug TEXT DEFAULT '',
+    status TEXT DEFAULT 'draft',
+    draft_json JSONB DEFAULT '{}'::jsonb,
+    published_snapshot_id TEXT DEFAULT '',
+    created_by TEXT DEFAULT '',
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+  );`,
+  `CREATE TABLE IF NOT EXISTS page_snapshots (
+    id TEXT PRIMARY KEY,
+    page_id TEXT NOT NULL REFERENCES store_pages(id) ON DELETE CASCADE,
+    store_slug TEXT NOT NULL REFERENCES stores(slug) ON DELETE CASCADE,
+    version INTEGER DEFAULT 1,
+    schema_json JSONB DEFAULT '{}'::jsonb,
+    created_by TEXT DEFAULT '',
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    note TEXT DEFAULT ''
+  );`,
+  `CREATE INDEX IF NOT EXISTS store_pages_store_slug_idx ON store_pages(store_slug);`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS store_pages_store_slug_page_key_idx ON store_pages(store_slug, page_key);`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS store_pages_store_slug_slug_idx ON store_pages(store_slug, slug);`,
+  `CREATE INDEX IF NOT EXISTS page_snapshots_page_id_idx ON page_snapshots(page_id);`
 ];
 
 function getSupabaseDbConnectionString() {
@@ -402,6 +432,10 @@ const DEFAULT_STORE_SETTINGS = {
   aboutUs: {
     title: 'About Us',
     content: ''
+  },
+  builder: {
+    enabled: false,
+    pages: {}
   }
 };
 
@@ -409,7 +443,9 @@ const DEFAULT_DB = {
   users: {},
   stores: {},
   templates: DEFAULT_TEMPLATES,
-  superAdmin: null
+  superAdmin: null,
+  builderPages: {},
+  pageSnapshots: {}
 };
 
 function cloneDefaultDB() {
@@ -418,6 +454,49 @@ function cloneDefaultDB() {
 
 function cloneDefaultStoreSettings() {
   return JSON.parse(JSON.stringify(DEFAULT_STORE_SETTINGS));
+}
+
+function normalizeBuilderPageRecord(page, storeLookup) {
+  const safe = page && typeof page === 'object' ? page : {};
+  const storeSlug = String(safe.storeSlug || '').trim();
+  const store = storeLookup && storeSlug && storeLookup[storeSlug] ? storeLookup[storeSlug] : null;
+  const pageKey = String(safe.pageKey || 'home').trim() || 'home';
+  const slug = String(safe.slug || pageKey).trim() || pageKey;
+  const draftJson = normalizeBuilderSchema(safe.draftJson, store);
+  const validation = validateBuilderSchema(draftJson);
+  return {
+    id: String(safe.id || generateId('builder-page')).trim() || generateId('builder-page'),
+    storeSlug,
+    pageKey,
+    pageType: String(safe.pageType || 'builder').trim() || 'builder',
+    title: String(safe.title || 'Home').trim() || 'Home',
+    slug,
+    status: ['draft', 'published'].includes(String(safe.status || '').trim()) ? String(safe.status).trim() : (safe.publishedSnapshotId ? 'published' : 'draft'),
+    draftJson: validation.ok ? draftJson : createDefaultHomePageSchema(store),
+    publishedSnapshotId: String(safe.publishedSnapshotId || '').trim(),
+    createdBy: String(safe.createdBy || '').trim(),
+    createdAt: String(safe.createdAt || new Date().toISOString()).trim() || new Date().toISOString(),
+    updatedAt: String(safe.updatedAt || safe.createdAt || new Date().toISOString()).trim() || new Date().toISOString()
+  };
+}
+
+function normalizePageSnapshotRecord(snapshot, pageLookup, storeLookup) {
+  const safe = snapshot && typeof snapshot === 'object' ? snapshot : {};
+  const pageId = String(safe.pageId || '').trim();
+  const page = pageLookup && pageId && pageLookup[pageId] ? pageLookup[pageId] : null;
+  const storeSlug = String(safe.storeSlug || (page && page.storeSlug) || '').trim();
+  const store = storeLookup && storeSlug && storeLookup[storeSlug] ? storeLookup[storeSlug] : null;
+  const schemaJson = normalizeBuilderSchema(safe.schemaJson || (page && page.draftJson) || null, store);
+  return {
+    id: String(safe.id || generateId('snapshot')).trim() || generateId('snapshot'),
+    pageId,
+    storeSlug,
+    version: Math.max(1, parseInt(safe.version || 1, 10) || 1),
+    schemaJson,
+    createdBy: String(safe.createdBy || '').trim(),
+    createdAt: String(safe.createdAt || new Date().toISOString()).trim() || new Date().toISOString(),
+    note: String(safe.note || '').trim()
+  };
 }
 
 function ensureStoreSettings(store) {
@@ -452,6 +531,7 @@ function ensureStoreSettings(store) {
   Object.assign(safe.robotsSettings, current.robotsSettings || {});
   Object.assign(safe.policies, current.policies || {});
   Object.assign(safe.aboutUs, current.aboutUs || {});
+  safe.builder = current.builder && typeof current.builder === 'object' ? current.builder : { enabled: false, pages: {} };
 
   safe.deliverySettings.fee = String(current.deliverySettings && current.deliverySettings.fee || shipping.fee || '0').trim() || '0';
   safe.deliverySettings.serviceType = String(current.deliverySettings && current.deliverySettings.serviceType || (shipping.mode === 'pickup' ? 'pickup' : 'delivery')).trim() || 'delivery';
@@ -472,6 +552,7 @@ function ensureStoreSettings(store) {
   };
 
   store.storeSettings = safe;
+  ensureStoreBuilderState(store);
   return safe;
 }
 
@@ -761,6 +842,15 @@ function normalizeDB(db) {
     }));
   });
 
+  safe.builderPages = db && typeof db.builderPages === 'object' && db.builderPages ? db.builderPages : {};
+  Object.keys(safe.builderPages).forEach((pageId) => {
+    safe.builderPages[pageId] = normalizeBuilderPageRecord(safe.builderPages[pageId], safe.stores);
+  });
+  safe.pageSnapshots = db && typeof db.pageSnapshots === 'object' && db.pageSnapshots ? db.pageSnapshots : {};
+  Object.keys(safe.pageSnapshots).forEach((snapshotId) => {
+    safe.pageSnapshots[snapshotId] = normalizePageSnapshotRecord(safe.pageSnapshots[snapshotId], safe.builderPages, safe.stores);
+  });
+
   return safe;
 }
 
@@ -910,6 +1000,8 @@ const RELATIONAL_PROBES = {
   products: 'id,store_slug,name,description,price,compare_price,stock,sku,image,images,variants,categories,tags,active,created_at,updated_at,payload',
   orders: 'id,store_slug,order_number,tracking_code,customer_name,customer_phone,customer_email,shipping_address,notes,payment_method,status,amount,subtotal,shipping_fee,tax_amount,discount_amount,discount_code,items,tracking_history,created_at,updated_at,payload',
   customers: 'id,store_slug,email,name,phone,password_hash,addresses,wishlist,order_ids,created_at,updated_at,payload',
+  store_pages: 'id,store_slug,page_key,page_type,title,slug,status,draft_json,published_snapshot_id,created_by,created_at,updated_at',
+  page_snapshots: 'id,page_id,store_slug,version,schema_json,created_by,created_at,note',
   app_config: 'key,value,updated_at'
 };
 const RELATIONAL_ORDERS = {
@@ -918,6 +1010,8 @@ const RELATIONAL_ORDERS = {
   products: 'id',
   orders: 'id',
   customers: 'id',
+  store_pages: 'id',
+  page_snapshots: 'id',
   app_config: 'key'
 };
 let _relationalSchemaReady = null;
@@ -1008,6 +1102,20 @@ function mergeSupplementalDb(base, supplemental) {
   const extra = supplemental && typeof supplemental === 'object' ? supplemental : null;
   if (extra && extra.superAdmin && !normalized.superAdmin) {
     normalized.superAdmin = extra.superAdmin;
+  }
+  if (extra && extra.builderPages && typeof extra.builderPages === 'object') {
+    Object.keys(extra.builderPages).forEach((pageId) => {
+      if (!normalized.builderPages[pageId]) {
+        normalized.builderPages[pageId] = normalizeBuilderPageRecord(extra.builderPages[pageId], normalized.stores);
+      }
+    });
+  }
+  if (extra && extra.pageSnapshots && typeof extra.pageSnapshots === 'object') {
+    Object.keys(extra.pageSnapshots).forEach((snapshotId) => {
+      if (!normalized.pageSnapshots[snapshotId]) {
+        normalized.pageSnapshots[snapshotId] = normalizePageSnapshotRecord(extra.pageSnapshots[snapshotId], normalized.builderPages, normalized.stores);
+      }
+    });
   }
   return normalized;
 }
@@ -1166,6 +1274,38 @@ function mapCustomerToRow(storeSlug, customer) {
   };
 }
 
+function mapBuilderPageToRow(page) {
+  const safePage = page && typeof page === 'object' ? page : {};
+  return {
+    id: String(safePage.id || ''),
+    store_slug: String(safePage.storeSlug || '').trim(),
+    page_key: String(safePage.pageKey || 'home').trim() || 'home',
+    page_type: String(safePage.pageType || 'builder').trim() || 'builder',
+    title: String(safePage.title || 'Home').trim() || 'Home',
+    slug: String(safePage.slug || safePage.pageKey || 'home').trim() || 'home',
+    status: String(safePage.status || 'draft').trim() || 'draft',
+    draft_json: normalizeBuilderSchema(safePage.draftJson, null),
+    published_snapshot_id: String(safePage.publishedSnapshotId || '').trim(),
+    created_by: String(safePage.createdBy || '').trim(),
+    created_at: getIsoTimestamp(safePage.createdAt),
+    updated_at: getIsoTimestamp(safePage.updatedAt || safePage.createdAt)
+  };
+}
+
+function mapPageSnapshotToRow(snapshot) {
+  const safeSnapshot = snapshot && typeof snapshot === 'object' ? snapshot : {};
+  return {
+    id: String(safeSnapshot.id || ''),
+    page_id: String(safeSnapshot.pageId || '').trim(),
+    store_slug: String(safeSnapshot.storeSlug || '').trim(),
+    version: Math.max(1, parseInt(safeSnapshot.version || 1, 10) || 1),
+    schema_json: normalizeBuilderSchema(safeSnapshot.schemaJson, null),
+    created_by: String(safeSnapshot.createdBy || '').trim(),
+    created_at: getIsoTimestamp(safeSnapshot.createdAt),
+    note: String(safeSnapshot.note || '').trim()
+  };
+}
+
 function buildRelationalRows(db) {
   const normalized = normalizeDB(db || {});
   const users = Object.values(normalized.users || {}).map(mapUserToRow).filter((row) => row.id && row.email);
@@ -1173,6 +1313,8 @@ function buildRelationalRows(db) {
   const products = [];
   const orders = [];
   const customers = [];
+  const builderPages = Object.values(normalized.builderPages || {}).map(mapBuilderPageToRow).filter((row) => row.id && row.store_slug);
+  const pageSnapshots = Object.values(normalized.pageSnapshots || {}).map(mapPageSnapshotToRow).filter((row) => row.id && row.page_id && row.store_slug);
   Object.values(normalized.stores || {}).forEach((store) => {
     const slug = String(store && store.slug || '').trim();
     (Array.isArray(store && store.products) ? store.products : []).forEach((product) => {
@@ -1188,7 +1330,7 @@ function buildRelationalRows(db) {
       if (row.id && row.store_slug) customers.push(row);
     });
   });
-  return { users, stores, products, orders, customers };
+  return { users, stores, products, orders, customers, builderPages, pageSnapshots };
 }
 
 function collectRelationalIds(db) {
@@ -1198,19 +1340,23 @@ function collectRelationalIds(db) {
     stores: rows.stores.map((row) => row.slug),
     products: rows.products.map((row) => row.id),
     orders: rows.orders.map((row) => row.id),
-    customers: rows.customers.map((row) => row.id)
+    customers: rows.customers.map((row) => row.id),
+    builderPages: rows.builderPages.map((row) => row.id),
+    pageSnapshots: rows.pageSnapshots.map((row) => row.id)
   };
 }
 
 function diffRemovedIds(previousDb, nextDb) {
-  const previous = previousDb ? collectRelationalIds(previousDb) : { users: [], stores: [], products: [], orders: [], customers: [] };
+  const previous = previousDb ? collectRelationalIds(previousDb) : { users: [], stores: [], products: [], orders: [], customers: [], builderPages: [], pageSnapshots: [] };
   const next = collectRelationalIds(nextDb);
   return {
     users: previous.users.filter((id) => !next.users.includes(id)),
     stores: previous.stores.filter((id) => !next.stores.includes(id)),
     products: previous.products.filter((id) => !next.products.includes(id)),
     orders: previous.orders.filter((id) => !next.orders.includes(id)),
-    customers: previous.customers.filter((id) => !next.customers.includes(id))
+    customers: previous.customers.filter((id) => !next.customers.includes(id)),
+    builderPages: previous.builderPages.filter((id) => !next.builderPages.includes(id)),
+    pageSnapshots: previous.pageSnapshots.filter((id) => !next.pageSnapshots.includes(id))
   };
 }
 
@@ -1327,13 +1473,45 @@ function mapCustomerRowToObject(row) {
   };
 }
 
+function mapStorePageRowToObject(row, storeLookup) {
+  return normalizeBuilderPageRecord({
+    id: row && row.id,
+    storeSlug: row && row.store_slug,
+    pageKey: row && row.page_key,
+    pageType: row && row.page_type,
+    title: row && row.title,
+    slug: row && row.slug,
+    status: row && row.status,
+    draftJson: row && row.draft_json,
+    publishedSnapshotId: row && row.published_snapshot_id,
+    createdBy: row && row.created_by,
+    createdAt: row && row.created_at,
+    updatedAt: row && row.updated_at
+  }, storeLookup);
+}
+
+function mapPageSnapshotRowToObject(row, pageLookup, storeLookup) {
+  return normalizePageSnapshotRecord({
+    id: row && row.id,
+    pageId: row && row.page_id,
+    storeSlug: row && row.store_slug,
+    version: row && row.version,
+    schemaJson: row && row.schema_json,
+    createdBy: row && row.created_by,
+    createdAt: row && row.created_at,
+    note: row && row.note
+  }, pageLookup, storeLookup);
+}
+
 async function loadRelationalDB(supabase, supplementalDb) {
-  const [userRows, storeRows, productRows, orderRows, customerRows, appConfig] = await Promise.all([
+  const [userRows, storeRows, productRows, orderRows, customerRows, storePageRows, pageSnapshotRows, appConfig] = await Promise.all([
     fetchAllRows(supabase, 'users', RELATIONAL_PROBES.users),
     fetchAllRows(supabase, 'stores', RELATIONAL_PROBES.stores),
     fetchAllRows(supabase, 'products', RELATIONAL_PROBES.products),
     fetchAllRows(supabase, 'orders', RELATIONAL_PROBES.orders),
     fetchAllRows(supabase, 'customers', RELATIONAL_PROBES.customers),
+    fetchAllRows(supabase, 'store_pages', RELATIONAL_PROBES.store_pages),
+    fetchAllRows(supabase, 'page_snapshots', RELATIONAL_PROBES.page_snapshots),
     loadAppConfigMap(supabase)
   ]);
   const db = cloneDefaultDB();
@@ -1362,6 +1540,14 @@ async function loadRelationalDB(supabase, supplementalDb) {
     if (!db.stores[slug]) return;
     const customer = mapCustomerRowToObject(row);
     if (customer.email) db.stores[slug].customers[customer.email] = customer;
+  });
+  storePageRows.forEach((row) => {
+    const page = mapStorePageRowToObject(row, db.stores);
+    if (page.id) db.builderPages[page.id] = page;
+  });
+  pageSnapshotRows.forEach((row) => {
+    const snapshot = mapPageSnapshotRowToObject(row, db.builderPages, db.stores);
+    if (snapshot.id) db.pageSnapshots[snapshot.id] = snapshot;
   });
   return normalizeDB(db);
 }
@@ -1412,9 +1598,13 @@ async function saveRelationalDB(supabase, db, previousDb) {
   await Promise.all([
     upsertRelationalRows(supabase, 'products', rows.products, 'id'),
     upsertRelationalRows(supabase, 'orders', rows.orders, 'id'),
-    upsertRelationalRows(supabase, 'customers', rows.customers, 'id')
+    upsertRelationalRows(supabase, 'customers', rows.customers, 'id'),
+    upsertRelationalRows(supabase, 'store_pages', rows.builderPages, 'id'),
+    upsertRelationalRows(supabase, 'page_snapshots', rows.pageSnapshots, 'id')
   ]);
   await Promise.all([
+    deleteRelationalRowsByIds(supabase, 'page_snapshots', 'id', removed.pageSnapshots),
+    deleteRelationalRowsByIds(supabase, 'store_pages', 'id', removed.builderPages),
     deleteRelationalRowsByIds(supabase, 'customers', 'id', removed.customers),
     deleteRelationalRowsByIds(supabase, 'orders', 'id', removed.orders),
     deleteRelationalRowsByIds(supabase, 'products', 'id', removed.products)
@@ -1702,6 +1892,165 @@ async function deleteStoreProductFast(db, storeSlug, productId) {
   return persistNormalizedDB(normalized, async (supabase) => {
     await deleteRelationalRowsByIds(supabase, 'products', 'id', [productId]);
   });
+}
+
+function listStoreBuilderPagesFromDb(db, storeSlug) {
+  const safeSlug = String(storeSlug || '').trim();
+  const normalized = normalizeDB(db || {});
+  return Object.values(normalized.builderPages || {})
+    .filter((page) => page.storeSlug === safeSlug)
+    .sort((a, b) => new Date(a.createdAt || 0) - new Date(b.createdAt || 0));
+}
+
+function getStoreBuilderPageByIdFromDb(db, storeSlug, pageId) {
+  const safeSlug = String(storeSlug || '').trim();
+  const safePageId = String(pageId || '').trim();
+  if (!safeSlug || !safePageId) return null;
+  const normalized = normalizeDB(db || {});
+  const page = normalized.builderPages && normalized.builderPages[safePageId] ? normalized.builderPages[safePageId] : null;
+  return page && page.storeSlug === safeSlug ? page : null;
+}
+
+function getStoreBuilderPageByKeyFromDb(db, storeSlug, pageKeyOrSlug) {
+  const safeSlug = String(storeSlug || '').trim();
+  const safeKey = String(pageKeyOrSlug || '').trim();
+  if (!safeSlug || !safeKey) return null;
+  return listStoreBuilderPagesFromDb(db, safeSlug).find((page) => page.pageKey === safeKey || page.slug === safeKey) || null;
+}
+
+function listPageSnapshotsFromDb(db, storeSlug, pageId) {
+  const safeSlug = String(storeSlug || '').trim();
+  const safePageId = String(pageId || '').trim();
+  const normalized = normalizeDB(db || {});
+  return Object.values(normalized.pageSnapshots || {})
+    .filter((snapshot) => snapshot.storeSlug === safeSlug && snapshot.pageId === safePageId)
+    .sort((a, b) => Number(b.version || 0) - Number(a.version || 0));
+}
+
+async function listStoreBuilderPages(storeSlug) {
+  const db = await loadDB();
+  return listStoreBuilderPagesFromDb(db, storeSlug);
+}
+
+async function getStoreBuilderPageById(storeSlug, pageId) {
+  const db = await loadDB();
+  return getStoreBuilderPageByIdFromDb(db, storeSlug, pageId);
+}
+
+async function getStoreBuilderPageByKey(storeSlug, pageKeyOrSlug) {
+  const db = await loadDB();
+  return getStoreBuilderPageByKeyFromDb(db, storeSlug, pageKeyOrSlug);
+}
+
+async function createStoreBuilderPage(storeSlug, payload) {
+  const safeSlug = String(storeSlug || '').trim();
+  if (!safeSlug) throw new Error('Store slug is required.');
+  const db = await loadDB();
+  const normalized = normalizeDB(db);
+  const store = normalized.stores[safeSlug];
+  if (!store) throw new Error('Store not found.');
+  const pageKey = String(payload && payload.pageKey || 'home').trim() || 'home';
+  const slug = String(payload && payload.slug || pageKey).trim() || pageKey;
+  if (listStoreBuilderPagesFromDb(normalized, safeSlug).some((page) => page.pageKey === pageKey || page.slug === slug)) {
+    throw new Error('Builder page already exists for this key or slug.');
+  }
+  const draftJson = normalizeBuilderSchema(payload && payload.draftJson ? payload.draftJson : createDefaultHomePageSchema(store), store);
+  const page = normalizeBuilderPageRecord({
+    id: generateId('builder-page'),
+    storeSlug: safeSlug,
+    pageKey,
+    pageType: String(payload && payload.pageType || 'builder').trim() || 'builder',
+    title: String(payload && payload.title || 'Home').trim() || 'Home',
+    slug,
+    status: 'draft',
+    draftJson,
+    publishedSnapshotId: '',
+    createdBy: String(payload && payload.createdBy || '').trim(),
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  }, normalized.stores);
+  normalized.builderPages[page.id] = page;
+  await saveDB(normalized);
+  return page;
+}
+
+async function saveStoreBuilderDraft(storeSlug, pageId, draftJson) {
+  const safeSlug = String(storeSlug || '').trim();
+  const safePageId = String(pageId || '').trim();
+  const db = await loadDB();
+  const normalized = normalizeDB(db);
+  const page = getStoreBuilderPageByIdFromDb(normalized, safeSlug, safePageId);
+  if (!page) throw new Error('Builder page not found.');
+  const store = normalized.stores[safeSlug] || null;
+  const nextDraft = normalizeBuilderSchema(draftJson, store);
+  const validation = validateBuilderSchema(nextDraft);
+  if (!validation.ok) throw new Error(validation.errors.join(' '));
+  page.draftJson = nextDraft;
+  page.updatedAt = new Date().toISOString();
+  page.status = page.publishedSnapshotId ? 'published' : 'draft';
+  normalized.builderPages[page.id] = normalizeBuilderPageRecord(page, normalized.stores);
+  await saveDB(normalized);
+  return normalized.builderPages[page.id];
+}
+
+async function publishStoreBuilderPage(storeSlug, pageId, actorId, note) {
+  const safeSlug = String(storeSlug || '').trim();
+  const safePageId = String(pageId || '').trim();
+  const db = await loadDB();
+  const normalized = normalizeDB(db);
+  const page = getStoreBuilderPageByIdFromDb(normalized, safeSlug, safePageId);
+  if (!page) throw new Error('Builder page not found.');
+  const snapshots = listPageSnapshotsFromDb(normalized, safeSlug, safePageId);
+  const snapshot = normalizePageSnapshotRecord({
+    id: generateId('snapshot'),
+    pageId: page.id,
+    storeSlug: safeSlug,
+    version: snapshots.length ? Math.max(...snapshots.map((entry) => Number(entry.version || 0))) + 1 : 1,
+    schemaJson: cloneBuilderValue(page.draftJson),
+    createdBy: String(actorId || '').trim(),
+    createdAt: new Date().toISOString(),
+    note: String(note || '').trim()
+  }, normalized.builderPages, normalized.stores);
+  normalized.pageSnapshots[snapshot.id] = snapshot;
+  page.publishedSnapshotId = snapshot.id;
+  page.status = 'published';
+  page.updatedAt = snapshot.createdAt;
+  normalized.builderPages[page.id] = normalizeBuilderPageRecord(page, normalized.stores);
+  await saveDB(normalized);
+  return { page: normalized.builderPages[page.id], snapshot };
+}
+
+async function getPublishedStoreBuilderPage(storeSlug, pageKeyOrSlug) {
+  const safeSlug = String(storeSlug || '').trim();
+  const db = await loadDB();
+  const normalized = normalizeDB(db);
+  const page = getStoreBuilderPageByKeyFromDb(normalized, safeSlug, pageKeyOrSlug);
+  if (!page || !page.publishedSnapshotId) return null;
+  const snapshot = normalized.pageSnapshots && normalized.pageSnapshots[page.publishedSnapshotId] ? normalized.pageSnapshots[page.publishedSnapshotId] : null;
+  if (!snapshot) return null;
+  return { page, snapshot };
+}
+
+async function listPageSnapshots(storeSlug, pageId) {
+  const db = await loadDB();
+  return listPageSnapshotsFromDb(db, storeSlug, pageId);
+}
+
+async function deleteStoreBuilderPage(storeSlug, pageId) {
+  const safeSlug = String(storeSlug || '').trim();
+  const safePageId = String(pageId || '').trim();
+  const db = await loadDB();
+  const normalized = normalizeDB(db);
+  const page = getStoreBuilderPageByIdFromDb(normalized, safeSlug, safePageId);
+  if (!page) throw new Error('Builder page not found.');
+  delete normalized.builderPages[page.id];
+  Object.keys(normalized.pageSnapshots || {}).forEach((snapshotId) => {
+    if (normalized.pageSnapshots[snapshotId] && normalized.pageSnapshots[snapshotId].pageId === page.id) {
+      delete normalized.pageSnapshots[snapshotId];
+    }
+  });
+  await saveDB(normalized);
+  return page;
 }
 
 function loadSessionData() {
@@ -1993,6 +2342,15 @@ module.exports = {
   saveStoreCustomerFast,
   saveStoreProductFast,
   deleteStoreProductFast,
+  listStoreBuilderPages,
+  getStoreBuilderPageById,
+  getStoreBuilderPageByKey,
+  createStoreBuilderPage,
+  saveStoreBuilderDraft,
+  publishStoreBuilderPage,
+  getPublishedStoreBuilderPage,
+  listPageSnapshots,
+  deleteStoreBuilderPage,
   getDBStatus,
   recordStoreVisit,
   loadSessionData,

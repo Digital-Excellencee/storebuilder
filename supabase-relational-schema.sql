@@ -35,11 +35,41 @@ create table if not exists public.customers (
   payload jsonb not null default '{}'::jsonb
 );
 
+create table if not exists public.store_pages (
+  id text primary key,
+  store_slug text not null references public.stores(slug) on delete cascade,
+  page_key text not null,
+  page_type text not null default 'builder',
+  title text not null default '',
+  slug text not null default '',
+  status text not null default 'draft',
+  draft_json jsonb not null default '{}'::jsonb,
+  published_snapshot_id text not null default '',
+  created_by text not null default '',
+  created_at timestamptz not null default timezone('utc', now()),
+  updated_at timestamptz not null default timezone('utc', now())
+);
+
+create table if not exists public.page_snapshots (
+  id text primary key,
+  page_id text not null references public.store_pages(id) on delete cascade,
+  store_slug text not null references public.stores(slug) on delete cascade,
+  version integer not null default 1,
+  schema_json jsonb not null default '{}'::jsonb,
+  created_by text not null default '',
+  created_at timestamptz not null default timezone('utc', now()),
+  note text not null default ''
+);
+
 create index if not exists stores_owner_id_idx on public.stores (owner_id);
 create index if not exists products_store_slug_idx on public.products (store_slug);
 create index if not exists orders_store_slug_idx on public.orders (store_slug);
 create index if not exists customers_store_slug_idx on public.customers (store_slug);
 create index if not exists customers_email_idx on public.customers (email);
+create index if not exists store_pages_store_slug_idx on public.store_pages (store_slug);
+create unique index if not exists store_pages_store_slug_page_key_idx on public.store_pages (store_slug, page_key);
+create unique index if not exists store_pages_store_slug_slug_idx on public.store_pages (store_slug, slug);
+create index if not exists page_snapshots_page_id_idx on public.page_snapshots (page_id);
 create unique index if not exists users_email_unique_idx on public.users (lower(email));
 
 update public.users
@@ -76,6 +106,8 @@ alter table public.stores enable row level security;
 alter table public.products enable row level security;
 alter table public.orders enable row level security;
 alter table public.customers enable row level security;
+alter table public.store_pages enable row level security;
+alter table public.page_snapshots enable row level security;
 
 drop policy if exists service_role_only on public.users;
 create policy service_role_only on public.users for all to service_role using (true) with check (true);
@@ -91,3 +123,9 @@ create policy service_role_only on public.orders for all to service_role using (
 
 drop policy if exists service_role_only on public.customers;
 create policy service_role_only on public.customers for all to service_role using (true) with check (true);
+
+drop policy if exists service_role_only on public.store_pages;
+create policy service_role_only on public.store_pages for all to service_role using (true) with check (true);
+
+drop policy if exists service_role_only on public.page_snapshots;
+create policy service_role_only on public.page_snapshots for all to service_role using (true) with check (true);

@@ -17,6 +17,7 @@ const { getAppCatalog, getAppDefinition, normalizeStoreApps } = require('./servi
 const { upload, csvUpload } = require('./middleware/upload');
 const { subdomainMiddleware } = require('./middleware/subdomain');
 const { sameOriginGuard } = require('./middleware/request-security');
+const { requireApiAuth, verifyApiToken } = require('./middleware/api-auth');
 
 let helmet, rateLimit, MemoryStore;
 try { helmet = require('helmet'); } catch (e) { console.log('[WARN] Install helmet: npm install helmet'); }
@@ -52,34 +53,12 @@ function generateSuperAdminToken() {
   return jwt.sign({ role: 'superadmin' }, JWT_SECRET, { expiresIn: '1d' });
 }
 
-function verifyToken(token) {
-  try {
-    return jwt.verify(token, JWT_SECRET);
-  } catch (error) {
-    return null;
-  }
-}
-
-function requireApiAuth(req, res, next) {
-  const auth = req.headers.authorization;
-  if (!auth || !auth.startsWith('Bearer ')) {
-    return res.status(401).json({ success: false, error: 'Unauthorized - No token' });
-  }
-  const decoded = verifyToken(auth.split(' ')[1]);
-  if (!decoded || decoded.role !== 'vendor') {
-    return res.status(401).json({ success: false, error: 'Unauthorized - Invalid token' });
-  }
-  req.apiUserId = decoded.userId;
-  req.apiUserEmail = decoded.email;
-  next();
-}
-
 function requireApiSuperAdmin(req, res, next) {
   const auth = req.headers.authorization;
   if (!auth || !auth.startsWith('Bearer ')) {
     return res.status(401).json({ success: false, error: 'Unauthorized' });
   }
-  const decoded = verifyToken(auth.split(' ')[1]);
+  const decoded = verifyApiToken(auth.split(' ')[1]);
   if (!decoded || decoded.role !== 'superadmin') {
     return res.status(401).json({ success: false, error: 'Unauthorized' });
   }
@@ -91,7 +70,7 @@ function requireApiCustomer(req, res, next) {
   if (!auth || !auth.startsWith('Bearer ')) {
     return res.status(401).json({ success: false, error: 'Unauthorized' });
   }
-  const decoded = verifyToken(auth.split(' ')[1]);
+  const decoded = verifyApiToken(auth.split(' ')[1]);
   if (!decoded || decoded.role !== 'customer') {
     return res.status(401).json({ success: false, error: 'Unauthorized' });
   }
@@ -519,6 +498,11 @@ app.get('/api/templates', async (req, res) => {
   }
 });
 
+app.use('/api/dashboard/pages', require('./routes/api/dashboard-pages.routes'));
+app.use('/api/dashboard/builder', require('./routes/api/dashboard-builder.routes'));
+app.use('/api/store', require('./routes/api/store-pages.routes'));
+app.use('/api/store', require('./routes/api/store-builder.routes'));
+
 app.post('/api/demo-request', async (req, res) => {
   try {
     const name = String(req.body.name || '').trim();
@@ -800,20 +784,6 @@ app.get('/api/store/:slug/products', async (req, res) => {
     const totalPages = Math.ceil(total / perPage);
     const paged = products.slice((pageNum - 1) * perPage, pageNum * perPage);
     res.json({ success: true, products: paged, total, page: pageNum, totalPages, perPage });
-  } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
-app.get('/api/store/:slug/page/:pageSlug', async (req, res) => {
-  try {
-    const db = await loadDB();
-    const store = getApiStore(db, req.params.slug);
-    if (!store) return res.status(404).json({ success: false, error: 'Store not found' });
-    const pageSlug = String(req.params.pageSlug || '').trim();
-    const page = (store.pages || []).find((entry) => entry.active !== false && String(entry.slug || '').trim() === pageSlug);
-    if (!page) return res.status(404).json({ success: false, error: 'Page not found' });
-    res.json({ success: true, page });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
   }
@@ -1493,53 +1463,6 @@ app.put('/api/dashboard/apps/:id', requireApiAuth, async (req, res) => {
     store.apps[appId] = target;
     await saveDB(db);
     res.json({ success: true, app: target });
-  } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
-app.get('/api/dashboard/pages', requireApiAuth, async (req, res) => {
-  try {
-    const db = await loadDB();
-    const store = getVendorStoreFromReq(db, req);
-    if (!store) return res.status(404).json({ success: false, error: 'Store not found' });
-    res.json({ success: true, pages: Array.isArray(store.pages) ? store.pages : [] });
-  } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
-app.post('/api/dashboard/pages', requireApiAuth, async (req, res) => {
-  try {
-    const db = await loadDB();
-    const store = getVendorStoreFromReq(db, req);
-    if (!store) return res.status(404).json({ success: false, error: 'Store not found' });
-    const title = String(req.body.title || '').trim();
-    const slug = slugify(String(req.body.slug || '').trim()) || generateId('page');
-    const content = String(req.body.content || '').trim();
-    const active = req.body.active !== false;
-    if (title.length < 2) return res.status(400).json({ success: false, error: 'Page title required' });
-    store.pages = Array.isArray(store.pages) ? store.pages : [];
-    const page = { id: generateId('page'), title, slug, content, active, createdAt: new Date().toISOString() };
-    store.pages.push(page);
-    await saveDB(db);
-    res.json({ success: true, page });
-  } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
-app.delete('/api/dashboard/pages/:id', requireApiAuth, async (req, res) => {
-  try {
-    const db = await loadDB();
-    const store = getVendorStoreFromReq(db, req);
-    if (!store) return res.status(404).json({ success: false, error: 'Store not found' });
-    store.pages = Array.isArray(store.pages) ? store.pages : [];
-    const index = store.pages.findIndex((entry) => entry.id === req.params.id);
-    if (index === -1) return res.status(404).json({ success: false, error: 'Page not found' });
-    const page = store.pages.splice(index, 1)[0];
-    await saveDB(db);
-    res.json({ success: true, page });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
   }
