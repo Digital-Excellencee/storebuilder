@@ -351,9 +351,123 @@ app.use(cors({
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'MCP-Protocol-Version', 'MCP-Session-Id', 'Last-Event-Id']
 }));
+
 app.set('trust proxy', 1);
+
+// Gemini Spark MCP OAuth bridge. Isolated routes only; normal Store Banao traffic is untouched.
+const GEMINI_MCP_PUBLIC_BASE = 'https://storebanao.com';
+const GEMINI_MCP_UPSTREAM_BASE = 'https://eupocbswbgsifprdqlsq.supabase.co/functions/v1/kartavya-job-mcp-oauth';
+
+function setGeminiMcpCors(res) {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Headers', 'authorization, content-type, accept, mcp-protocol-version, mcp-session-id, last-event-id');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Expose-Headers', 'mcp-session-id, www-authenticate');
+  res.setHeader('Cache-Control', 'no-store');
+}
+
+app.get('/.well-known/oauth-protected-resource/mcp', (req, res) => {
+  setGeminiMcpCors(res);
+  res.json({
+    resource: GEMINI_MCP_PUBLIC_BASE + '/mcp',
+    authorization_servers: [GEMINI_MCP_PUBLIC_BASE],
+    scopes_supported: ['crm.read', 'crm.write'],
+    bearer_methods_supported: ['header']
+  });
+});
+
+app.get('/.well-known/oauth-authorization-server', (req, res) => {
+  setGeminiMcpCors(res);
+  res.json({
+    issuer: GEMINI_MCP_PUBLIC_BASE,
+    authorization_endpoint: GEMINI_MCP_PUBLIC_BASE + '/oauth/authorize',
+    token_endpoint: GEMINI_MCP_PUBLIC_BASE + '/oauth/token',
+    registration_endpoint: GEMINI_MCP_PUBLIC_BASE + '/oauth/register',
+    response_types_supported: ['code'],
+    grant_types_supported: ['authorization_code', 'refresh_token'],
+    code_challenge_methods_supported: ['S256'],
+    token_endpoint_auth_methods_supported: ['none', 'client_secret_basic', 'client_secret_post'],
+    scopes_supported: ['crm.read', 'crm.write']
+  });
+});
+
+async function proxyGeminiMcp(req, res, upstreamPath) {
+  try {
+    const target = new URL(GEMINI_MCP_UPSTREAM_BASE + upstreamPath);
+    for (const [key, value] of Object.entries(req.query || {})) {
+      if (Array.isArray(value)) value.forEach((item) => target.searchParams.append(key, String(item)));
+      else if (value != null) target.searchParams.set(key, String(value));
+    }
+
+    const headers = {};
+    for (const name of ['authorization', 'accept', 'content-type', 'mcp-protocol-version', 'mcp-session-id', 'last-event-id']) {
+      const value = req.get(name);
+      if (value) headers[name] = value;
+    }
+
+    let body;
+    if (!['GET', 'HEAD'].includes(req.method)) {
+      const contentType = String(req.get('content-type') || '');
+      if (contentType.includes('application/json')) {
+        body = JSON.stringify(req.body || {});
+      } else if (contentType.includes('application/x-www-form-urlencoded')) {
+        const form = new URLSearchParams();
+        Object.entries(req.body || {}).forEach(([key, value]) => {
+          if (Array.isArray(value)) value.forEach((item) => form.append(key, String(item)));
+          else if (value != null) form.set(key, String(value));
+        });
+        body = form.toString();
+      } else if (typeof req.body === 'string' || Buffer.isBuffer(req.body)) {
+        body = req.body;
+      }
+    }
+
+    const upstream = await fetch(target, {
+      method: req.method,
+      headers,
+      body,
+      redirect: 'manual'
+    });
+
+    setGeminiMcpCors(res);
+    res.status(upstream.status);
+    const responseContentType = upstream.headers.get('content-type');
+    if (responseContentType) res.setHeader('Content-Type', responseContentType);
+    const sessionId = upstream.headers.get('mcp-session-id');
+    if (sessionId) res.setHeader('MCP-Session-Id', sessionId);
+    const location = upstream.headers.get('location');
+    if (location) res.setHeader('Location', location);
+
+    if (upstream.status === 401 && upstreamPath === '/') {
+      res.setHeader('WWW-Authenticate', 'Bearer resource_metadata="' + GEMINI_MCP_PUBLIC_BASE + '/.well-known/oauth-protected-resource/mcp"');
+    } else {
+      const wwwAuth = upstream.headers.get('www-authenticate');
+      if (wwwAuth) res.setHeader('WWW-Authenticate', wwwAuth);
+    }
+
+    if (req.method === 'HEAD') return res.end();
+    const buffer = Buffer.from(await upstream.arrayBuffer());
+
+    if (upstreamPath === '/authorize' && String(responseContentType || '').includes('text/html')) {
+      const html = buffer.toString('utf8')
+        .split(GEMINI_MCP_UPSTREAM_BASE + '/authorize')
+        .join(GEMINI_MCP_PUBLIC_BASE + '/oauth/authorize');
+      return res.send(html);
+    }
+    return res.send(buffer);
+  } catch (error) {
+    console.error('[GEMINI-MCP] Proxy error:', error && error.stack ? error.stack : error);
+    setGeminiMcpCors(res);
+    return res.status(502).json({ error: 'mcp_proxy_error' });
+  }
+}
+
+app.all('/oauth/register', (req, res) => proxyGeminiMcp(req, res, '/register'));
+app.all('/oauth/authorize', (req, res) => proxyGeminiMcp(req, res, '/authorize'));
+app.all('/oauth/token', (req, res) => proxyGeminiMcp(req, res, '/token'));
+app.all('/mcp', (req, res) => proxyGeminiMcp(req, res, '/'));
 
 // Rate limiting
 if (rateLimit) {
